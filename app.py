@@ -6,10 +6,15 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as gg
 
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
+# Safe PyTorch Import
+try:
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    from torch.utils.data import DataLoader, TensorDataset
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
 
 from sklearn.model_selection import KFold, cross_val_score, train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
@@ -21,13 +26,13 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 
 # Set Page Configuration
 st.set_page_config(
-    page_title="Kaggle AI Data Science Studio & Neural Lab",
+    page_title="Neural Studio X — Kaggle AI & Data Science Suite",
     page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom Styling (Glassmorphism & Sleek Dark Aesthetics)
+# Custom Styling
 st.markdown("""
 <style>
     .stApp {
@@ -42,22 +47,12 @@ st.markdown("""
         text-align: center;
         margin-bottom: 12px;
     }
-    .badge-tag {
-        background: linear-gradient(135deg, #00c6ff, #0072ff);
-        color: white;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 600;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# Banner Title
-st.title("🧠 Kaggle AI Data Science Studio & Neural Lab")
-st.caption("End-to-End Automated EDA, PyTorch Neural Networks, Feature Engineering, and Kaggle Submissions | Created by Himanshu")
+st.title("🧠 Neural Studio X — Kaggle AI Suite")
+st.caption("End-to-End Automated EDA, PyTorch Neural Labs, Feature Engineering, and Kaggle Submissions | By Himanshu")
 
-# --- Helper Data Generators ---
 @st.cache_data
 def get_house_data():
     np.random.seed(42)
@@ -138,7 +133,7 @@ with tab1:
     st.subheader("Data Table Preview")
     st.dataframe(raw_df.head(10), use_container_width=True)
     
-    if mode_type == "regression":
+    if mode_type == "regression" and 'SalePrice' in raw_df.columns:
         st.subheader("Target Distribution Analysis: Raw vs Log-Transformed log1p")
         col_a, col_b = st.columns(2)
         
@@ -161,7 +156,6 @@ with tab1:
 # ==================== TAB 2: FEATURE ENGINEERING ====================
 with tab2:
     st.header("⚙️ Feature Engineering Workshop")
-    st.write("Construct domain features and simulate real-time preprocessing pipelines.")
     
     if 'SalePrice' in raw_df.columns:
         st.success("Detected House Prices Tabular Features!")
@@ -181,7 +175,7 @@ HouseAge = 2026 - YearBuilt
         fe_df['HouseAge'] = 2026 - fe_df['YearBuilt']
         
         with col_fe2:
-            st.markdown("### Engineered Correlations with SalePrice")
+            st.markdown("### Engineered Feature Correlations")
             corrs = fe_df[['TotalSF', 'TotalBath', 'HouseAge', 'OverallQual', 'SalePrice']].corr()['SalePrice'].sort_values(ascending=False)
             fig_corr = px.bar(x=corrs.values[1:], y=corrs.index[1:], orientation='h', title="Feature Correlations", color=corrs.values[1:], color_continuous_scale="bluered")
             st.plotly_chart(fig_corr, use_container_width=True)
@@ -189,8 +183,12 @@ HouseAge = 2026 - YearBuilt
 # ==================== TAB 3: PYTORCH NEURAL LAB ====================
 with tab3:
     st.header("🧠 PyTorch Convolutional Neural Network (CNN) Lab")
-    st.write("Inspect PyTorch CNN architecture, filter feature maps, and sample handwritten digits.")
     
+    if HAS_TORCH:
+        st.caption("PyTorch Engine Loaded Successfully")
+    else:
+        st.info("PyTorch running in simulation mode. (Install PyTorch to enable GPU acceleration)")
+        
     if 'label' in raw_df.columns or mode_type == "cv":
         st.subheader("Interactive 28x28 Grayscale Digit Inspector")
         sample_idx = st.slider("Select Digit Sample Index", 0, len(raw_df) - 1, 42)
@@ -201,11 +199,9 @@ with tab3:
         
         col_img, col_conf = st.columns([1, 2])
         with col_img:
-            fig_img, ax_img = plt.subplots(figsize=(3, 3))
-            ax_img.imshow(digit_img, cmap='gray')
-            ax_img.set_title(f"True Label: {digit_label}", fontsize=12, fontweight='bold')
-            ax_img.axis('off')
-            st.pyplot(fig_img)
+            fig_img = px.imshow(digit_img, color_continuous_scale='gray', title=f"True Label: {digit_label}")
+            fig_img.update_layout(width=280, height=280)
+            st.plotly_chart(fig_img, use_container_width=True)
             
         with col_conf:
             st.subheader("PyTorch Softmax Confidence Distribution")
@@ -213,8 +209,8 @@ with tab3:
             probs[digit_label] += 3.0
             probs /= probs.sum()
             
-            conf_df = pd.DataFrame({'Digit': np.arange(10), 'Confidence': probs})
-            fig_conf = px.bar(conf_df, x='Digit', y='Confidence', title="Live Model Prediction Probabilities", color='Confidence', color_continuous_scale='plasma')
+            conf_df = pd.DataFrame({'Digit': [str(i) for i in range(10)], 'Confidence': probs})
+            fig_conf = px.bar(conf_df, x='Digit', y='Confidence', title="Model Prediction Confidence", color='Confidence', color_continuous_scale='plasma')
             st.plotly_chart(fig_conf, use_container_width=True)
 
 # ==================== TAB 4: MODEL TRAINING ARENA ====================
@@ -226,7 +222,7 @@ with tab4:
         st.subheader("Hyperparameter Tuning Sliders")
         lr = st.slider("Learning Rate", 0.0001, 0.05, 0.001, format="%.4f")
         n_est = st.slider("Number of Trees / Estimators", 50, 300, 100, 25)
-        dropout = st.slider("PyTorch Dropout Probability", 0.0, 0.5, 0.25, 0.05)
+        dropout = st.slider("Dropout Probability", 0.0, 0.5, 0.25, 0.05)
         
     with col_m2:
         st.subheader("Live Training Loss & Validation Accuracy")
@@ -235,14 +231,12 @@ with tab4:
         val_acc = [88.5, 92.4, 95.1, 97.2, 98.4]
         
         loss_df = pd.DataFrame({'Epoch': epochs, 'Train Loss': train_loss, 'Val Accuracy (%)': val_acc})
-        fig_loss = px.line(loss_df, x='Epoch', y=['Train Loss', 'Val Accuracy (%)'], markers=True, title="Training History")
+        fig_loss = px.line(loss_df, x='Epoch', y=['Train Loss', 'Val Accuracy (%)'], markers=True, title="Training Performance History")
         st.plotly_chart(fig_loss, use_container_width=True)
 
 # ==================== TAB 5: KAGGLE SUBMISSION GENERATOR ====================
 with tab5:
     st.header("🚀 Automated Kaggle Submission Generator")
-    
-    st.info("Validation Check: Enforces exact test row count compliance and null-value assertions before export.")
     
     if mode_type == "regression":
         n_rows = 1459
@@ -272,12 +266,12 @@ with tab5:
 with tab6:
     st.header("🎖️ Kaggle Daily Streak & Portfolio Hub")
     
-    st.markdown("### 🏆 Active Repositories")
-    st.markdown("- 🧠 **[digit-recognizer-pytorch](https://github.com/himanshu-2l/digit-recognizer-pytorch.git)**: PyTorch Computer Vision CNN Solution.")
-    st.markdown("- 🏠 **[house-pred-kaggle](https://github.com/himanshu-2l/house-pred-kaggle.git)**: Tabular House Prices Advanced Regression Solution.")
-    st.markdown("- 🚀 **[kaggle-ai-studio](https://github.com/himanshu-2l/kaggle-ai-studio.git)**: Full-Stack Web Application & Neural Lab.")
+    st.markdown("### 🏆 Active GitHub Repositories")
+    st.markdown("- 🧠 **[neural-studio-x](https://github.com/himanshu-2l/neural-studio-x.git)**: Full-Stack Interactive AI Studio Suite.")
+    st.markdown("- 👁️ **[digit-recognizer-pytorch](https://github.com/himanshu-2l/digit-recognizer-pytorch.git)**: PyTorch Computer Vision CNN.")
+    st.markdown("- 🏠 **[house-pred-kaggle](https://github.com/himanshu-2l/house-pred-kaggle.git)**: Tabular Regression Machine Learning Model.")
     
-    st.markdown("### 🔥 Daily Streak Reminder")
+    st.markdown("### 🔥 Daily Kaggle Activity Checklist")
     st.checkbox("Log into Kaggle today", value=True)
     st.checkbox("Make 1 prediction submission", value=True)
     st.checkbox("Upvote 1 public discussion or notebook", value=False)
