@@ -1,59 +1,65 @@
-# 🧠 Digit Recognizer - PyTorch Convolutional Neural Network (CNN)
+# 🧠 Neural Studio X — Kaggle AI & Data Science Web Suite
 
-Welcome to the **Digit Recognizer** Computer Vision repository! This project implements a custom **Convolutional Neural Network (CNN)** using **PyTorch** to classify 28x28 grayscale handwritten digits (0 through 9) for the Kaggle competition.
+**Neural Studio X** is an interactive, full-stack Data Science & Machine Learning Web Application built with **Streamlit**, **PyTorch**, **Plotly**, **Scikit-Learn**, and **Pandas**. 
+
+It provides automated Exploratory Data Analysis (EDA), real-time PyTorch Neural Network feature map inspection, interactive model training arenas, and 1-click Kaggle submission validation.
+
+---
+
+## 🌟 Key Features & Modules
+
+### 📊 1. Automated EDA & 3D Analytics Engine
+- **Universal Dataset Support**: Built-in profiler for Kaggle House Prices, Digit Recognizer, and custom uploaded CSV files.
+- **Target Distribution Normalization**: Interactive comparison of raw target distributions vs log-transformed $\log(1 + x)$ (`np.log1p`).
+- **Interactive 3D Scatter & Correlation Heatmaps**: Dynamic 3D Plotly visualizer mapping living area, basement square footage, overall quality, and sales price.
+
+### ⚙️ 2. Intelligent Feature Engineering Workshop
+- **Domain Feature Generation**: Interactive creation of combined square footage (`TotalSF`), total bathrooms (`TotalBath`), and property age (`HouseAge`).
+- **Correlation Analytics**: Dynamic bar charts ranking engineered feature correlations with target metrics.
+
+### 🧠 3. PyTorch Neural Lab
+- **Interactive Grayscale Image Inspector**: View 28x28 grayscale handwritten digit samples.
+- **Softmax Prediction Confidence Visualizer**: Live probability distribution bar charts across digit classes (0–9).
+- **PyTorch Architecture Overview**: Layer-by-layer breakdown of `Conv2D` $\to$ `BatchNorm` $\to$ `MaxPool` $\to$ `Dropout` $\to$ `Linear` neural networks.
+
+### 🏆 4. Model Training Arena & Hyperparameter Tuning
+- **Model Comparison**: Evaluate Ridge Regression, Random Forest, Gradient Boosting, and PyTorch Neural Networks.
+- **Interactive Tuning Sliders**: Adjust Learning Rates ($0.0001 - 0.05$), Number of Trees ($50 - 300$), and Dropout probabilities live.
+- **Real-Time Training History**: Live Plotly loss & validation accuracy curves.
+
+### 🚀 5. Automated Kaggle Submission Generator
+- **Compliance & Assertion Engine**: Enforces exact row count compliance (`1459` test rows for House Prices, `1000` for Digit Recognizer) and non-null data assertions.
+- **One-Click Browser Export**: Download formatted `submission.csv` files directly from the web app interface.
 
 ---
 
 ## 📁 Repository Structure
 
 ```
-.
-├── digit_recognizer_pytorch.ipynb   # Complete PyTorch CNN Jupyter Notebook
-├── generate_digit_submission.py     # Standalone PyTorch training & prediction script
-├── submission_digit.csv             # Formatted prediction output file for Kaggle
-└── README.md                        # Project documentation & CNN architecture
+neural-studio-x/
+├── app.py              # Main Multi-Module Streamlit Application
+├── requirements.txt    # Application Dependencies
+├── README.md           # Project Overview & Architecture Guide
+└── .gitignore          # Git Ignore Configuration
 ```
 
 ---
 
-## 🏗️ Neural Network Architecture
+## 🚀 Local Installation & Setup
 
-The PyTorch model (`DigitCNN`) utilizes a 2-stage feature extraction network followed by a dense classification head:
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/himanshu-2l/neural-studio-x.git
+   cd neural-studio-x
+   ```
 
-1. **Convolution Block 1**:
-   - `Conv2d` (1 input channel $\to$ 32 feature maps, $3 \times 3$ kernel, padding=1)
-   - `BatchNorm2d(32)` + `ReLU` activation
-   - `MaxPool2d(2, 2)` $\to$ Downsamples spatial dimensions from $28 \times 28$ to $14 \times 14$.
+2. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-2. **Convolution Block 2**:
-   - `Conv2d` (32 channels $\to$ 64 feature maps, $3 \times 3$ kernel, padding=1)
-   - `BatchNorm2d(64)` + `ReLU` activation
-   - `MaxPool2d(2, 2)` $\to$ Downsamples spatial dimensions from $14 \times 14$ to $7 \times 7$.
-
-3. **Classification Head**:
-   - `Dropout(0.25)` regularization
-   - `Linear(64 * 7 * 7 -> 128)` + `ReLU`
-   - `Linear(128 -> 10)` output logits (Digits 0–9).
-
----
-
-## 🚀 Quickstart & Training
-
-### 1. Run via PyTorch Script
-Train the CNN and export predictions locally:
-```bash
-python generate_digit_submission.py
-```
-
-### 2. Run on Kaggle GPU
-1. Go to the [Kaggle Digit Recognizer Competition](https://www.kaggle.com/c/digit-recognizer).
-2. Upload `digit_recognizer_pytorch.ipynb`.
-3. Under **Session options**, set Accelerator to **GPU T4**.
-4. Click **Run All** $\to$ **Save Version** $\to$ **Submit to Competition**!
-
----
-
-## 📊 Performance Metrics
-- **Optimizer**: Adam ($\text{lr} = 0.001$)
-- **Loss Function**: `CrossEntropyLoss`
-- **Validation Accuracy**: $>98\%$ after 5 epochs
+3. **Launch the web application**:
+   ```bash
+   streamlit run app.py
+   ```
+   Open `http://localhost:8501` in your browser!
