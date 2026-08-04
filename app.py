@@ -37,7 +37,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for Futuristic UI/UX (Glassmorphism, Neon Accents, Smooth Animations)
+# Custom CSS for Futuristic UI/UX
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
@@ -101,19 +101,13 @@ st.markdown("""
         box-shadow: 0 0 8px #10b981;
     }
 
-    /* Metric Cards */
+    /* Glass Cards */
     .glass-card {
         background: rgba(30, 41, 59, 0.35);
         border: 1px solid rgba(255, 255, 255, 0.07);
         border-radius: 14px;
         padding: 18px 20px;
         transition: all 0.3s ease;
-    }
-    
-    .glass-card:hover {
-        transform: translateY(-2px);
-        border-color: rgba(0, 242, 254, 0.3);
-        box-shadow: 0 8px 25px -5px rgba(0, 242, 254, 0.15);
     }
     
     .card-label {
@@ -153,14 +147,6 @@ st.markdown("""
         background: linear-gradient(135deg, rgba(0, 242, 254, 0.15) 0%, rgba(79, 172, 254, 0.15) 100%) !important;
         color: #00f2fe !important;
         border: 1px solid rgba(0, 242, 254, 0.3) !important;
-    }
-    
-    /* Code Editor Styling */
-    code, pre {
-        font-family: 'JetBrains Mono', monospace !important;
-        background-color: #0b101d !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        border-radius: 8px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -222,7 +208,7 @@ def get_digit_data():
 st.sidebar.markdown("## ⚙️ Control Center")
 dataset_choice = st.sidebar.selectbox(
     "Active Dataset / Project",
-    ["🏠 House Prices (Tabular Regression)", "🧠 Digit Recognizer (PyTorch CV)", "📁 Upload Custom Dataset"]
+    ["🏠 House Prices (Tabular Regression)", "🧠 Digit Recognizer (PyTorch CV)", "📁 Upload Custom CSV"]
 )
 
 if dataset_choice == "🏠 House Prices (Tabular Regression)":
@@ -232,9 +218,14 @@ elif dataset_choice == "🧠 Digit Recognizer (PyTorch CV)":
     raw_df = get_digit_data()
     mode_type = "cv"
 else:
-    uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"])
+    uploaded = st.sidebar.file_uploader("Upload CSV File", type=["csv"])
     if uploaded:
-        raw_df = pd.read_csv(uploaded)
+        try:
+            raw_df = pd.read_csv(uploaded)
+            st.sidebar.success(f"Successfully loaded '{uploaded.name}' ({len(raw_df)} rows)")
+        except Exception as e:
+            st.sidebar.error(f"Error reading CSV: {e}")
+            raw_df = get_house_data()
         mode_type = "custom"
     else:
         raw_df = get_house_data()
@@ -270,61 +261,80 @@ with tab1:
     st.markdown("#### 📋 Interactive Data Table")
     st.dataframe(raw_df.head(10), use_container_width=True)
     
-    if mode_type == "regression" and 'SalePrice' in raw_df.columns:
+    num_cols = raw_df.select_dtypes(include=[np.number]).columns.tolist()
+    
+    if len(num_cols) > 0:
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("#### 📈 Target Distribution Analysis: Raw vs Log-Transformed")
-        col_a, col_b = st.columns(2)
+        target_col = st.selectbox("Select Numeric Feature for Distribution Analysis", num_cols, index=len(num_cols)-1)
         
-        fig1 = px.histogram(raw_df, x="SalePrice", nbins=30, title="Raw SalePrice Distribution (Right-Skewed)", template="plotly_dark", color_discrete_sequence=['#00f2fe'])
+        col_a, col_b = st.columns(2)
+        fig1 = px.histogram(raw_df, x=target_col, nbins=30, title=f"Raw {target_col} Distribution", template="plotly_dark", color_discrete_sequence=['#00f2fe'])
         fig1.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         col_a.plotly_chart(fig1, use_container_width=True)
         
-        raw_df['log_SalePrice'] = np.log1p(raw_df['SalePrice'])
-        fig2 = px.histogram(raw_df, x="log_SalePrice", nbins=30, title="Log-Transformed log1p(SalePrice) (Normal Curve)", template="plotly_dark", color_discrete_sequence=['#00ff87'])
-        fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        col_b.plotly_chart(fig2, use_container_width=True)
-        
-        st.markdown("#### 🌐 Interactive 3D Feature Space Scatter Plot")
-        fig3d = px.scatter_3d(
-            raw_df, x='GrLivArea', y='TotalBsmtSF', z='SalePrice',
-            color='OverallQual', size='SalePrice',
-            template="plotly_dark",
-            title="3D Space: Living Area vs Basement SF vs Target SalePrice",
-            color_continuous_scale="turbo"
-        )
-        fig3d.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig3d, use_container_width=True)
+        if (raw_df[target_col] > 0).all():
+            log_vals = np.log1p(raw_df[target_col])
+            fig2 = px.histogram(x=log_vals, nbins=30, title=f"Log-Transformed log1p({target_col})", template="plotly_dark", color_discrete_sequence=['#00ff87'])
+            fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            col_b.plotly_chart(fig2, use_container_width=True)
+            
+        if len(num_cols) >= 3:
+            st.markdown("#### 🌐 Interactive 3D Feature Space Scatter Plot")
+            fig3d = px.scatter_3d(
+                raw_df, x=num_cols[0], y=num_cols[1], z=num_cols[-1],
+                color=num_cols[-1], template="plotly_dark",
+                title=f"3D Scatter: {num_cols[0]} vs {num_cols[1]} vs {num_cols[-1]}",
+                color_continuous_scale="turbo"
+            )
+            fig3d.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig3d, use_container_width=True)
 
 # ==================== TAB 2: FEATURE WORKSHOP ====================
 with tab2:
     st.markdown("### ⚙️ Feature Engineering & Interaction Workshop")
     
-    if 'SalePrice' in raw_df.columns:
-        st.success("✅ Tabular Feature Suite Active")
-        
-        col_fe1, col_fe2 = st.columns(2)
-        with col_fe1:
-            st.markdown("#### Domain Engineered Features")
-            st.code("""
-# Total Living Area
-TotalSF = TotalBsmtSF + GrLivArea
-
-# Total Bathroom Count
-TotalBath = FullBath + (0.5 * HalfBath)
-
-# Property Age
-HouseAge = 2026 - YearBuilt
-            """, language="python")
-            
-        fe_df = raw_df.copy()
+    fe_df = raw_df.copy()
+    
+    # Fail-safe domain feature calculations
+    if 'TotalBsmtSF' in fe_df.columns and 'GrLivArea' in fe_df.columns:
         fe_df['TotalSF'] = fe_df['TotalBsmtSF'] + fe_df['GrLivArea']
-        fe_df['TotalBath'] = fe_df['FullBath'] + (0.5 * fe_df['HalfBath'])
+    if 'FullBath' in fe_df.columns:
+        half_bath = fe_df['HalfBath'] if 'HalfBath' in fe_df.columns else 0
+        fe_df['TotalBath'] = fe_df['FullBath'] + (0.5 * half_bath)
+    if 'YearBuilt' in fe_df.columns:
         fe_df['HouseAge'] = 2026 - fe_df['YearBuilt']
         
-        with col_fe2:
-            st.markdown("#### Pearson Correlation Ranking with Target")
-            corrs = fe_df[['TotalSF', 'TotalBath', 'HouseAge', 'OverallQual', 'SalePrice']].corr()['SalePrice'].sort_values(ascending=False)
-            fig_corr = px.bar(x=corrs.values[1:], y=corrs.index[1:], orientation='h', template="plotly_dark", title="Feature Correlations", color=corrs.values[1:], color_continuous_scale="electric")
+    num_cols_fe = fe_df.select_dtypes(include=[np.number]).columns.tolist()
+    
+    col_fe1, col_fe2 = st.columns(2)
+    with col_fe1:
+        st.markdown("#### Interactive Custom Feature Creator")
+        if len(num_cols_fe) >= 2:
+            f1 = st.selectbox("Feature 1", num_cols_fe, index=0)
+            f2 = st.selectbox("Feature 2", num_cols_fe, index=min(1, len(num_cols_fe)-1))
+            op = st.selectbox("Operation", ["Addition (+)", "Subtraction (-)", "Multiplication (*)", "Ratio (/)"])
+            
+            if op == "Addition (+)":
+                new_col_name = f"{f1}_plus_{f2}"
+                fe_df[new_col_name] = fe_df[f1] + fe_df[f2]
+            elif op == "Subtraction (-)":
+                new_col_name = f"{f1}_minus_{f2}"
+                fe_df[new_col_name] = fe_df[f1] - fe_df[f2]
+            elif op == "Multiplication (*)":
+                new_col_name = f"{f1}_mult_{f2}"
+                fe_df[new_col_name] = fe_df[f1] * fe_df[f2]
+            else:
+                new_col_name = f"{f1}_ratio_{f2}"
+                fe_df[new_col_name] = fe_df[f1] / (fe_df[f2] + 1e-5)
+                
+            st.success(f"Created engineered feature: `{new_col_name}`")
+            
+    with col_fe2:
+        st.markdown("#### Feature Correlation Ranking")
+        if len(num_cols_fe) > 1:
+            target_corr = st.selectbox("Select Target Column for Correlation", num_cols_fe, index=len(num_cols_fe)-1)
+            corrs = fe_df[num_cols_fe].corr()[target_corr].sort_values(ascending=False)
+            fig_corr = px.bar(x=corrs.values[1:], y=corrs.index[1:], orientation='h', template="plotly_dark", title=f"Correlations with {target_corr}", color=corrs.values[1:], color_continuous_scale="electric")
             fig_corr.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig_corr, use_container_width=True)
 
@@ -337,13 +347,14 @@ with tab3:
     else:
         st.info("ℹ️ PyTorch Running in Simulation Mode")
         
-    if 'label' in raw_df.columns or mode_type == "cv":
+    pix_cols = [c for c in raw_df.columns if c.startswith('pixel') or 'pixel' in c]
+    
+    if len(pix_cols) == 784:
         st.markdown("#### 🖼️ Grayscale Digit Image Inspector & Neural Activation")
         sample_idx = st.slider("Select Sample Digit Index", 0, len(raw_df) - 1, 42)
         
-        pix_cols = [c for c in raw_df.columns if c != 'label']
         digit_img = raw_df.iloc[sample_idx][pix_cols].values.reshape(28, 28)
-        digit_label = raw_df.iloc[sample_idx]['label']
+        digit_label = raw_df.iloc[sample_idx]['label'] if 'label' in raw_df.columns else 0
         
         col_img, col_conf = st.columns([1, 2])
         with col_img:
@@ -361,6 +372,8 @@ with tab3:
             fig_conf = px.bar(conf_df, x='Digit Class', y='Probability', template="plotly_dark", title="Live Neural Prediction Confidence", color='Probability', color_continuous_scale='plasma')
             fig_conf.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig_conf, use_container_width=True)
+    else:
+        st.info("ℹ️ Current dataset is tabular. Switch to 'Digit Recognizer (PyTorch CV)' in the sidebar to inspect 28x28 images!")
 
 # ==================== TAB 4: MODEL ARENA ====================
 with tab4:
@@ -395,11 +408,17 @@ with tab5:
             'Id': np.arange(1461, 1461 + n_rows),
             'SalePrice': np.round(np.random.normal(180000, 30000, size=n_rows), 2)
         })
-    else:
+    elif mode_type == "cv":
         n_rows = 1000
         sub_data = pd.DataFrame({
             'ImageId': np.arange(1, n_rows + 1),
             'Label': np.random.randint(0, 10, size=n_rows)
+        })
+    else:
+        n_rows = len(raw_df)
+        sub_data = pd.DataFrame({
+            'Row_ID': np.arange(1, n_rows + 1),
+            'Prediction': np.random.normal(0, 1, size=n_rows)
         })
         
     st.success(f"✅ Submission compliant: Exactly {len(sub_data):,} rows generated!")
@@ -419,7 +438,7 @@ with tab6:
     
     st.markdown("#### 🏆 Active GitHub Repositories")
     st.markdown("- 🧠 **[neural-studio-x](https://github.com/himanshu-2l/neural-studio-x.git)**: Full-Stack AI Suite & Neural Lab.")
-    st.markdown("- 👁️ **[digit-recognizer-pytorch](https://github.com/himanshu-2l/digit-recognizer-pytorch.git)**: PyTorch Computer Vision CNN Solution.")
+    st.markdown("- 👁️ **[digit-recognizer-pytorch](https://github.com/himanshu-2l/digit-recognizer-pytorch.git)**: PyTorch Computer Vision CNN.")
     st.markdown("- 🏠 **[house-pred-kaggle](https://github.com/himanshu-2l/house-pred-kaggle.git)**: Tabular Regression Machine Learning Model.")
     
     st.markdown("#### 🔥 Daily Streak Checklist")
