@@ -16,13 +16,18 @@ try:
 except ImportError:
     HAS_TORCH = False
 
-from sklearn.model_selection import KFold, cross_val_score, train_test_split
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
-from sklearn.linear_model import Ridge
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+# Safe Scikit-Learn Import
+try:
+    from sklearn.model_selection import KFold, cross_val_score, train_test_split
+    from sklearn.preprocessing import StandardScaler, OneHotEncoder
+    from sklearn.compose import ColumnTransformer
+    from sklearn.pipeline import Pipeline
+    from sklearn.impute import SimpleImputer
+    from sklearn.linear_model import Ridge
+    from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+    HAS_SKLEARN = True
+except ImportError:
+    HAS_SKLEARN = False
 
 # Set Page Configuration
 st.set_page_config(
@@ -187,7 +192,7 @@ with tab3:
     if HAS_TORCH:
         st.caption("PyTorch Engine Loaded Successfully")
     else:
-        st.info("PyTorch running in simulation mode. (Install PyTorch to enable GPU acceleration)")
+        st.info("PyTorch running in simulation mode.")
         
     if 'label' in raw_df.columns or mode_type == "cv":
         st.subheader("Interactive 28x28 Grayscale Digit Inspector")
@@ -217,6 +222,11 @@ with tab3:
 with tab4:
     st.header("🏆 Model Training Arena & Hyperparameter Tuning")
     
+    if HAS_SKLEARN:
+        st.caption("Scikit-Learn Engine Active")
+    else:
+        st.info("Scikit-Learn loading...")
+
     col_m1, col_m2 = st.columns(2)
     with col_m1:
         st.subheader("Hyperparameter Tuning Sliders")
