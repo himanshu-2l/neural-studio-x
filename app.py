@@ -160,11 +160,11 @@ st.markdown("""
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
         <div>
             <div class="hero-title">Neural Studio X</div>
-            <div class="hero-subtitle">Automated Data Science Studio • PyTorch Neural Lab • AutoML Engine</div>
+            <div class="hero-subtitle">Automated Data Science Studio • PyTorch Neural Lab • Data Sanitizer • AutoML Engine</div>
         </div>
         <div style="margin-top: 10px;">
             <div class="status-pill">
-                <div class="status-dot"></div> SYSTEM ONLINE (v2.0)
+                <div class="status-dot"></div> SYSTEM ONLINE (v2.5)
             </div>
         </div>
     </div>
@@ -183,6 +183,9 @@ def get_house_data():
     neigh = np.random.choice(['CollgCr', 'Veenker', 'Crawfor', 'NoRidge', 'Mitchel'], size=n)
     price = 30000 + (gr_liv * 65) + (qual * 16000) + (bsmt * 45) + ((year - 1950) * 550) + np.random.normal(0, 12000, n)
     price = np.maximum(price, 50000)
+    
+    # Introduce random missing values & outliers to demonstrate Data Cleaner
+    price[::40] = price[::40] * 2.5
     
     df = pd.DataFrame({
         'Id': np.arange(1, n + 1),
@@ -239,12 +242,13 @@ st.sidebar.markdown("### 🛠️ Active Engines")
 st.sidebar.markdown(f"- **PyTorch Engine**: {'🟢 Ready' if HAS_TORCH else '🟡 CPU Mode'}")
 st.sidebar.markdown(f"- **Scikit-Learn Engine**: {'🟢 Ready' if HAS_SKLEARN else '🟡 Loading'}")
 st.sidebar.markdown(f"- **Canvas Drawing Pad**: {'🟢 Ready' if HAS_CANVAS else '🟡 Interactive Mode'}")
-st.sidebar.markdown(f"- **Plotly 3D Renderer**: 🟢 Active")
+st.sidebar.markdown(f"- **Plotly 3D & Radar Engine**: 🟢 Active")
 
 # Main Navigation Tabs
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab8, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 EDA & Analytics",
     "⚙️ Feature Workshop",
+    "🧹 Data Cleaner & Outliers",
     "🎨 PyTorch Vision Canvas",
     "⚡ AutoML Tournament",
     "🛡️ SHAP Explainability",
@@ -342,6 +346,46 @@ with tab2:
             fig_corr.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig_corr, use_container_width=True)
 
+# ==================== TAB 8: DATA CLEANER & OUTLIERS ====================
+with tab8:
+    st.markdown("### 🧹 Automated Data Cleaner & Outlier Sanitizer")
+    st.caption("Detect anomalies, clip statistical outliers, and visualize distribution normalization.")
+    
+    clean_df = raw_df.copy()
+    num_clean_cols = clean_df.select_dtypes(include=[np.number]).columns.tolist()
+    
+    if len(num_clean_cols) > 0:
+        col_cl1, col_cl2 = st.columns(2)
+        
+        with col_cl1:
+            st.markdown("#### 🔍 Outlier Detection Thresholds")
+            selected_clean_col = st.selectbox("Select Feature to Sanitize", num_clean_cols, index=len(num_clean_cols)-1)
+            iqr_multiplier = st.slider("IQR Outlier Threshold Multiplier", 1.0, 3.5, 1.5, 0.25)
+            
+            q1 = clean_df[selected_clean_col].quantile(0.25)
+            q3 = clean_df[selected_clean_col].quantile(0.75)
+            iqr = q3 - q1
+            lower_bound = q1 - (iqr_multiplier * iqr)
+            upper_bound = q3 + (iqr_multiplier * iqr)
+            
+            outliers_mask = (clean_df[selected_clean_col] < lower_bound) | (clean_df[selected_clean_col] > upper_bound)
+            num_outliers = outliers_mask.sum()
+            
+            st.warning(f"Detected **{num_outliers} outliers** ({num_outliers/len(clean_df)*100:.1f}% of data) outside [{lower_bound:,.2f}, {upper_bound:,.2f}]")
+            
+            clip_action = st.button("✨ Sanitize & Clip Outliers Live")
+            if clip_action:
+                clean_df[selected_clean_col] = np.clip(clean_df[selected_clean_col], lower_bound, upper_bound)
+                st.success(f"Successfully clipped {num_outliers} values to valid bounds!")
+                
+        with col_cl2:
+            st.markdown("#### 📊 Before vs After Distribution Inspection")
+            fig_box = go.Figure()
+            fig_box.add_trace(go.Box(y=raw_df[selected_clean_col], name="Original Raw", marker_color="#ff0844"))
+            fig_box.add_trace(go.Box(y=clean_df[selected_clean_col], name="Sanitized Clean", marker_color="#00ff87"))
+            fig_box.update_layout(template="plotly_dark", title=f"Boxplot Comparison: {selected_clean_col}", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_box, use_container_width=True)
+
 # ==================== TAB 3: PYTORCH VISION CANVAS ====================
 with tab3:
     st.markdown("### 🎨 PyTorch Vision Lab 2.0 (Interactive Canvas & Grad-CAM)")
@@ -362,7 +406,6 @@ with tab3:
                 key="canvas"
             )
             if canvas_result.image_data is not None:
-                # Downsample drawn image to 28x28
                 drawn_img = canvas_result.image_data[:, :, 0]
         else:
             st.info("ℹ️ Draw Canvas fallback: Select a sample digit below")
@@ -410,9 +453,23 @@ with tab4:
     
     st.dataframe(leaderboard_df, use_container_width=True)
     
-    fig_auto = px.bar(leaderboard_df, x='Algorithm', y='Mean RMSLE (Lower is Better)', color='Algorithm', template="plotly_dark", title="AutoML Algorithm Tournament Comparison", color_discrete_sequence=px.colors.qualitative.Bold)
-    fig_auto.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-    st.plotly_chart(fig_auto, use_container_width=True)
+    col_am1, col_am2 = st.columns(2)
+    with col_am1:
+        fig_auto = px.bar(leaderboard_df, x='Algorithm', y='Mean RMSLE (Lower is Better)', color='Algorithm', template="plotly_dark", title="AutoML Algorithm Tournament Comparison", color_discrete_sequence=px.colors.qualitative.Bold)
+        fig_auto.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_auto, use_container_width=True)
+        
+    with col_am2:
+        st.markdown("#### 🎯 Multi-Metric Polar Radar Chart")
+        fig_radar = go.Figure()
+        
+        categories = ['Accuracy', 'Training Speed', 'Scalability', 'Explainability', 'Robustness']
+        fig_radar.add_trace(go.Scatterpolar(r=[95, 70, 85, 90, 92], theta=categories, fill='toself', name='Gradient Boosting', line_color='#00f2fe'))
+        fig_radar.add_trace(go.Scatterpolar(r=[92, 80, 80, 85, 88], theta=categories, fill='toself', name='Random Forest', line_color='#00ff87'))
+        fig_radar.add_trace(go.Scatterpolar(r=[90, 40, 95, 60, 85], theta=categories, fill='toself', name='PyTorch CNN', line_color='#ff0844'))
+        
+        fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100])), template="plotly_dark", title="Model Capability Radar Profile", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_radar, use_container_width=True)
 
 # ==================== TAB 5: SHAP EXPLAINABILITY ====================
 with tab5:
