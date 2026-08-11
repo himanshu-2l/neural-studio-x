@@ -115,3 +115,37 @@ def get_house_data_df(n: int = 800, seed: int = 42) -> pd.DataFrame:
         'YearBuilt': year,   'FullBath': fbath,   'HalfBath': hbath,
         'Neighborhood': neigh, 'SalePrice': price
     })
+
+
+def calculate_drift(reference_df: pd.DataFrame, target_df: pd.DataFrame, threshold: float = 0.05) -> dict:
+    """
+    Perform a two-sample Kolmogorov-Smirnov test to detect feature distribution drift.
+    Returns a dict with drift metrics per numeric column.
+    """
+    from scipy.stats import ks_2samp
+    metrics = {}
+
+    ref_num = reference_df.select_dtypes(include=[np.number]).columns
+    tgt_num = target_df.select_dtypes(include=[np.number]).columns
+    common_cols = [c for c in ref_num if c in tgt_num and c not in ('SalePrice', 'id', 'label')]
+
+    for col in common_cols:
+        ref_data = reference_df[col].dropna().values
+        tgt_data = target_df[col].dropna().values
+
+        if len(ref_data) < 5 or len(tgt_data) < 5:
+            continue
+
+        stat, p_val = ks_2samp(ref_data, tgt_data)
+        drifted = bool(p_val < threshold)
+
+        metrics[col] = {
+            'statistic': float(stat),
+            'p_value': float(p_val),
+            'drift_detected': drifted,
+            'ref_mean': float(ref_data.mean()),
+            'tgt_mean': float(tgt_data.mean())
+        }
+
+    return metrics
+

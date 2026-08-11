@@ -11,7 +11,7 @@ from datetime import datetime
 
 from database import init_db, save_experiment, load_experiments, save_prediction, load_predictions, get_stats
 from auth import build_authenticator, render_login, render_logout
-from ml_utils import build_features, get_pipeline, run_kfold, get_house_data_df, HAS_SKLEARN
+from ml_utils import build_features, get_pipeline, run_kfold, get_house_data_df, HAS_SKLEARN, calculate_drift
 
 init_db()
 
@@ -530,13 +530,14 @@ with st.sidebar:
 # ─────────────────────────────────────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────────────────────────────────────
-tab_eda, tab_train, tab_inf, tab_automl, tab_shap, tab_exp, tab_deploy = st.tabs([
+tab_eda, tab_train, tab_inf, tab_automl, tab_shap, tab_exp, tab_drift, tab_deploy = st.tabs([
     "📊  Data Explorer",
     "⚡  Model Trainer",
     "🔮  Inference Lab",
     "🏆  AutoML",
     "🛡️  Explainability",
     "📈  Experiments",
+    "🛡️  Drift Monitor",
     "🚀  Deploy & API",
 ])
 
@@ -917,6 +918,102 @@ with tab_exp:
     else:
         empty_state("📈", "No Experiments Yet",
                     "Train a model in the ⚡ Model Trainer tab to start populating the registry.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 7 — DRIFT MONITOR
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_drift:
+    section("🛡️", "Data Quality & Drift Monitor", "Statistical test (Kolmogorov-Smirnov) to identify production input feature drift.", "nsx-icon-red")
+
+    # Load logged predictions
+    preds = load_predictions(_username)
+    if not preds or len(preds) < 5:
+        empty_state("🛡️", "Insufficient Prediction Traffic",
+                    f"You need at least 5 logged predictions to run drift analysis. Currently logged: {len(preds)}")
+    else:
+        pred_rows = []
+        for p in preds:
+            try:
+                feats = json.loads(p['input_features'])
+                pred_rows.append(feats)
+            except Exception:
+                pass
+
+        if len(pred_rows) >= 5:
+            target_df = pd.DataFrame(pred_rows)
+            ref_df = get_house_data_df()
+
+            # Run Kolmogorov-Smirnov test
+            drift_results = calculate_drift(ref_df, target_df)
+
+            if drift_results:
+                total_features = len(drift_results)
+                drifted_features = sum(1 for c, info in drift_results.items() if info['drift_detected'])
+
+                # Summary metric row
+                st.markdown('<div class="nsx-metric-row nsx-metric-row-3">', unsafe_allow_html=True)
+                dc1, dc2, dc3 = st.columns(3)
+                with dc1:
+                    status_val = "⚠️ Drift Detected" if drifted_features > 0 else "🟢 Healthy"
+                    accent_val = "red" if drifted_features > 0 else "green"
+                    metric_card("System Status", status_val, f"{drifted_features} of {total_features} features drifted", accent_val)
+                with dc2:
+                    metric_card("Reference Set Size", f"{len(ref_df):,}", "Baseline (Training) samples", "blue")
+                with dc3:
+                    metric_card("Production Set Size", f"{len(target_df):,}", "Logged queries", "purple")
+                st.markdown('</div>', unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # Breakdown Table
+                st.markdown("#### Feature Drift Breakdown")
+                drift_list = []
+                for col, info in drift_results.items():
+                    drift_list.append({
+                        'Feature': col,
+                        'KS Statistic': f"{info['statistic']:.4f}",
+                        'p-value': f"{info['p_value']:.4f}",
+                        'Baseline Mean': f"{info['ref_mean']:.2f}",
+                        'Production Mean': f"{info['tgt_mean']:.2f}",
+                        'Status': '❌ Drifted' if info['drift_detected'] else '✅ Stable'
+                    })
+                st.dataframe(pd.DataFrame(drift_list), use_container_width=True, hide_index=True)
+
+                st.markdown("<div class='nsx-divider'></div>", unsafe_allow_html=True)
+
+                # Comparative Chart
+                st.markdown("#### Visualize Distribution Shift")
+                drift_cols = list(drift_results.keys())
+                sel_drift_col = st.selectbox("Select Feature to Graph", drift_cols)
+
+                fig_drift = go.Figure()
+                fig_drift.add_trace(go.Histogram(
+                    x=ref_df[sel_drift_col],
+                    name="Reference (Train)",
+                    histnorm='probability density',
+                    marker_color='#00d4ff',
+                    opacity=0.6,
+                    nbinsx=20
+                ))
+                fig_drift.add_trace(go.Histogram(
+                    x=target_df[sel_drift_col],
+                    name="Production (Live)",
+                    histnorm='probability density',
+                    marker_color='#f87171',
+                    opacity=0.6,
+                    nbinsx=20
+                ))
+                fig_drift.update_layout(
+                    barmode='overlay',
+                    title=f"Probability Density Shift for: {sel_drift_col}",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                )
+                st.plotly_chart(chart_cfg(fig_drift), use_container_width=True)
+            else:
+                empty_state("🛡️", "No Analysis Columns Found", "No common numeric features are available for testing.")
+        else:
+            empty_state("🛡️", "Parser Error", "No prediction entries could be formatted for evaluation.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

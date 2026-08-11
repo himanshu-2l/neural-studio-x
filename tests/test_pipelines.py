@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 # Import from ml_utils — pure ML module, no Streamlit dependency
-from ml_utils import build_features, get_pipeline, run_kfold
+from ml_utils import build_features, get_pipeline, run_kfold, calculate_drift
 
 
 def get_sample_house_df(n=100):
@@ -88,3 +88,24 @@ class TestKFold:
         _, model, _ = run_kfold(df, "Ridge", n_splits=3)
         assert model is not None
         assert hasattr(model, 'predict')
+
+
+class TestCalculateDrift:
+    def test_no_drift_on_identical_datasets(self):
+        df_ref = get_sample_house_df(100)
+        df_tgt = get_sample_house_df(100)
+        metrics = calculate_drift(df_ref, df_tgt)
+        # For identical datasets, p-value should be 1.0 (no drift detected)
+        for col, info in metrics.items():
+            assert not info['drift_detected']
+            assert info['p_value'] > 0.05
+
+    def test_drift_detected_on_shifted_dataset(self):
+        df_ref = get_sample_house_df(100)
+        df_tgt = get_sample_house_df(100)
+        # Shift GrLivArea values significantly
+        df_tgt['GrLivArea'] = df_tgt['GrLivArea'] + 2000
+        metrics = calculate_drift(df_ref, df_tgt)
+        assert metrics['GrLivArea']['drift_detected']
+        assert metrics['GrLivArea']['p_value'] < 0.05
+
