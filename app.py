@@ -9,678 +9,993 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 
-# Internal modules
 from database import init_db, save_experiment, load_experiments, save_prediction, load_predictions, get_stats
 from auth import build_authenticator, render_login, render_logout
+from ml_utils import build_features, get_pipeline, run_kfold, get_house_data_df, HAS_SKLEARN
 
-# Bootstrap DB on every cold start
 init_db()
 
-# Configure structured logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)s | %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
 logger = logging.getLogger("neural_studio_x")
 
-# Safe PyTorch Import
-try:
-    import torch
-    import torch.nn as nn
-    import torch.optim as optim
-    from torch.utils.data import DataLoader, TensorDataset
-    HAS_TORCH = True
-except ImportError:
-    HAS_TORCH = False
-
-# Safe Scikit-Learn Import
 try:
     import joblib
-    from sklearn.model_selection import KFold, cross_val_score, train_test_split
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.pipeline import Pipeline
-    from sklearn.impute import SimpleImputer
-    from sklearn.linear_model import Ridge
-    from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-    from sklearn.metrics import mean_squared_log_error, r2_score, mean_absolute_error
-    HAS_SKLEARN = True
+    HAS_JOBLIB = True
 except ImportError:
-    HAS_SKLEARN = False
+    HAS_JOBLIB = False
 
-# Safe SHAP Import
 try:
     import shap
     HAS_SHAP = True
 except ImportError:
     HAS_SHAP = False
 
-# Safe Drawable Canvas Import
 try:
     from streamlit_drawable_canvas import st_canvas
     HAS_CANVAS = True
 except ImportError:
     HAS_CANVAS = False
 
-# Page Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+# PAGE CONFIG
+# ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Neural Studio X | AI & Data Science Suite",
+    page_title="Neural Studio X",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom Styling
+# ─────────────────────────────────────────────────────────────────────────────
+# DESIGN SYSTEM — CSS
+# ─────────────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Outfit', sans-serif; }
-    .stApp { background: radial-gradient(circle at 10% 20%, rgb(10, 15, 26) 0%, rgb(5, 7, 13) 90.2%); color: #e2e8f0; }
-    .hero-banner { background: linear-gradient(135deg, rgba(15,23,42,0.7) 0%, rgba(30,41,59,0.4) 100%); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 24px 32px; margin-bottom: 24px; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5); }
-    .hero-title { background: linear-gradient(135deg, #00f2fe 0%, #4facfe 50%, #00ff87 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 2.6rem; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 4px; }
-    .hero-subtitle { color: #94a3b8; font-size: 1.05rem; }
-    .status-pill { display: inline-flex; align-items: center; gap: 6px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #10b981; padding: 4px 12px; border-radius: 20px; font-size: 0.82rem; font-weight: 600; }
-    .status-dot { width: 8px; height: 8px; background-color: #10b981; border-radius: 50%; box-shadow: 0 0 8px #10b981; }
-    .glass-card { background: rgba(30,41,59,0.35); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 18px 20px; }
-    .card-label { font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
-    .card-value { font-size: 1.8rem; font-weight: 700; color: #f8fafc; margin-top: 4px; }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: rgba(15,23,42,0.5); padding: 6px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); }
-    .stTabs [data-baseweb="tab"] { height: 44px; border-radius: 8px; color: #94a3b8; font-weight: 600; border: none; padding: 0 16px; }
-    .stTabs [aria-selected="true"] { background: linear-gradient(135deg, rgba(0,242,254,0.15) 0%, rgba(79,172,254,0.15) 100%) !important; color: #00f2fe !important; border: 1px solid rgba(0,242,254,0.3) !important; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ── Root variables ─────────────────────────────────────────── */
+:root {
+  --bg-base:       #080c14;
+  --bg-surface:    #0d1422;
+  --bg-elevated:   #121929;
+  --bg-card:       rgba(18, 25, 41, 0.8);
+  --bg-hover:      rgba(30, 41, 61, 0.9);
+
+  --border-subtle: rgba(255,255,255,0.05);
+  --border-muted:  rgba(255,255,255,0.09);
+  --border-accent: rgba(0, 212, 255, 0.25);
+
+  --text-primary:  #f0f4ff;
+  --text-secondary:#8b97b5;
+  --text-muted:    #4a5568;
+
+  --accent-blue:   #00d4ff;
+  --accent-green:  #00e5a0;
+  --accent-purple: #a78bfa;
+  --accent-amber:  #fbbf24;
+  --accent-red:    #f87171;
+
+  --grad-primary:  linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
+  --grad-green:    linear-gradient(135deg, #00e5a0 0%, #00d4ff 100%);
+  --grad-warm:     linear-gradient(135deg, #fbbf24 0%, #f97316 100%);
+
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --radius-xl:  20px;
+
+  --shadow-sm:  0 2px 8px rgba(0,0,0,0.3);
+  --shadow-md:  0 4px 20px rgba(0,0,0,0.4);
+  --shadow-lg:  0 8px 40px rgba(0,0,0,0.5);
+  --shadow-glow-blue:  0 0 20px rgba(0,212,255,0.15);
+  --shadow-glow-green: 0 0 20px rgba(0,229,160,0.15);
+}
+
+/* ── Global reset ────────────────────────────────────────────── */
+html, body, [class*="css"] {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.stApp {
+  background: var(--bg-base);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% 0%, rgba(0,212,255,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(124,58,237,0.05) 0%, transparent 60%);
+  color: var(--text-primary);
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────── */
+[data-testid="stSidebar"] {
+  background: var(--bg-surface) !important;
+  border-right: 1px solid var(--border-subtle) !important;
+}
+
+[data-testid="stSidebar"] > div:first-child {
+  padding-top: 0 !important;
+}
+
+/* ── Main content padding ─────────────────────────────────────── */
+.main .block-container {
+  padding: 1.5rem 2rem 3rem;
+  max-width: 1400px;
+}
+
+/* ── Headings ─────────────────────────────────────────────────── */
+h1, h2, h3, h4 { font-weight: 700; letter-spacing: -0.02em; color: var(--text-primary); }
+
+/* ── Streamlit native overrides ────────────────────────────────── */
+.stButton > button {
+  background: linear-gradient(135deg, rgba(0,212,255,0.12) 0%, rgba(124,58,237,0.12) 100%);
+  color: var(--accent-blue);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.5rem 1.25rem;
+  transition: all 0.2s ease;
+  letter-spacing: 0.01em;
+}
+.stButton > button:hover {
+  background: linear-gradient(135deg, rgba(0,212,255,0.2) 0%, rgba(124,58,237,0.2) 100%);
+  border-color: var(--accent-blue);
+  box-shadow: var(--shadow-glow-blue);
+  transform: translateY(-1px);
+}
+.stButton > button[kind="primary"] {
+  background: var(--grad-primary);
+  color: white;
+  border: none;
+}
+
+.stSelectbox > div, .stSlider, .stMultiSelect {
+  font-size: 0.85rem;
+}
+
+[data-testid="stSlider"] > div > div {
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple)) !important;
+}
+
+.stDataFrame, .stDataFrame > div { border-radius: var(--radius-md); overflow: hidden; }
+[data-testid="stDataFrame"] { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+
+/* ── Tabs ─────────────────────────────────────────────────────── */
+.stTabs [data-baseweb="tab-list"] {
+  gap: 4px;
+  background: rgba(13,20,34,0.9);
+  padding: 5px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+.stTabs [data-baseweb="tab"] {
+  height: 38px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.82rem;
+  border: none !important;
+  padding: 0 14px;
+  background: transparent !important;
+  transition: all 0.15s ease;
+}
+.stTabs [data-baseweb="tab"]:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.04) !important;
+}
+.stTabs [aria-selected="true"] {
+  background: rgba(0,212,255,0.1) !important;
+  color: var(--accent-blue) !important;
+  border: 1px solid rgba(0,212,255,0.2) !important;
+  font-weight: 600 !important;
+}
+
+/* ── Success / warning / error ───────────────────────────────── */
+.stSuccess { background: rgba(0,229,160,0.08); border: 1px solid rgba(0,229,160,0.25); border-radius: var(--radius-md); }
+.stWarning { background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.25); border-radius: var(--radius-md); }
+.stInfo    { background: rgba(0,212,255,0.08);  border: 1px solid rgba(0,212,255,0.2);  border-radius: var(--radius-md); }
+
+/* ── Custom component classes ─────────────────────────────────── */
+
+/* Topbar brand strip */
+.nsx-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px;
+  background: rgba(13,20,34,0.95);
+  border-bottom: 1px solid var(--border-subtle);
+  margin: -1.5rem -2rem 1.5rem;
+  backdrop-filter: blur(20px);
+  position: sticky; top: 0; z-index: 99;
+}
+.nsx-brand {
+  display: flex; align-items: center; gap: 10px;
+}
+.nsx-logo-mark {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--grad-primary);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 900; color: white;
+  box-shadow: var(--shadow-glow-blue);
+}
+.nsx-brand-name {
+  font-size: 1.1rem; font-weight: 800; letter-spacing: -0.03em;
+  background: var(--grad-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.nsx-brand-ver {
+  font-size: 0.7rem; color: var(--text-muted);
+  background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle);
+  padding: 2px 7px; border-radius: 20px; font-weight: 500; margin-left: 4px;
+}
+.nsx-status-row { display: flex; align-items: center; gap: 12px; }
+.nsx-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 20px;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em;
+}
+.nsx-badge-green { background: rgba(0,229,160,0.1); border: 1px solid rgba(0,229,160,0.25); color: var(--accent-green); }
+.nsx-badge-blue  { background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.2);  color: var(--accent-blue); }
+.nsx-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* Metric cards */
+.nsx-metric-row { display: grid; gap: 14px; margin-bottom: 20px; }
+.nsx-metric-row-4 { grid-template-columns: repeat(4, 1fr); }
+.nsx-metric-row-3 { grid-template-columns: repeat(3, 1fr); }
+.nsx-metric-row-2 { grid-template-columns: repeat(2, 1fr); }
+
+.nsx-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  backdrop-filter: blur(12px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.nsx-card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
+
+.nsx-card-accent-blue  { border-left: 3px solid var(--accent-blue);   }
+.nsx-card-accent-green { border-left: 3px solid var(--accent-green);  }
+.nsx-card-accent-purple{ border-left: 3px solid var(--accent-purple); }
+.nsx-card-accent-amber { border-left: 3px solid var(--accent-amber);  }
+
+.nsx-card-label {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted); font-weight: 600; margin-bottom: 8px;
+}
+.nsx-card-value {
+  font-size: 1.9rem; font-weight: 800; color: var(--text-primary);
+  letter-spacing: -0.04em; line-height: 1;
+}
+.nsx-card-sub { font-size: 0.75rem; color: var(--text-secondary); margin-top: 6px; }
+.nsx-card-icon { font-size: 1.3rem; margin-bottom: 8px; }
+
+/* Section headers */
+.nsx-section-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 16px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.nsx-section-title {
+  font-size: 1rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.01em;
+}
+.nsx-section-desc { font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px; }
+.nsx-section-icon {
+  width: 34px; height: 34px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.nsx-icon-blue   { background: rgba(0,212,255,0.12);  }
+.nsx-icon-green  { background: rgba(0,229,160,0.12);  }
+.nsx-icon-purple { background: rgba(167,139,250,0.12); }
+.nsx-icon-amber  { background: rgba(251,191,36,0.12); }
+.nsx-icon-red    { background: rgba(248,113,113,0.12); }
+
+/* Prediction result card */
+.nsx-predict-result {
+  background: linear-gradient(135deg, rgba(0,212,255,0.06) 0%, rgba(0,229,160,0.06) 100%);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-xl);
+  padding: 28px 24px;
+  text-align: center;
+  box-shadow: var(--shadow-glow-blue), var(--shadow-md);
+}
+.nsx-predict-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 10px; font-weight: 600; }
+.nsx-predict-price {
+  font-size: 3rem; font-weight: 900; letter-spacing: -0.04em;
+  background: var(--grad-green); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  line-height: 1;
+}
+.nsx-predict-range { font-size: 0.82rem; color: var(--text-secondary); margin-top: 10px; }
+.nsx-predict-model { font-size: 0.72rem; color: var(--text-muted); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
+
+/* Code-style tags */
+.nsx-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle);
+  padding: 2px 8px; border-radius: 6px;
+  font-size: 0.72rem; font-family: 'JetBrains Mono', monospace; color: var(--text-secondary);
+}
+
+/* Divider */
+.nsx-divider { height: 1px; background: var(--border-subtle); margin: 20px 0; }
+
+/* Sidebar profile card */
+.nsx-profile {
+  background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); padding: 14px 16px; margin: 8px 0 16px;
+}
+.nsx-profile-name { font-weight: 700; font-size: 0.9rem; color: var(--text-primary); }
+.nsx-profile-role { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+.nsx-profile-avatar {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--grad-primary);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700; color: white;
+  float: left; margin-right: 12px;
+}
+
+/* Engine status pills */
+.nsx-engine-row { display: flex; flex-direction: column; gap: 6px; }
+.nsx-engine-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 10px;
+  background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); font-size: 0.78rem;
+}
+.nsx-engine-name { color: var(--text-secondary); font-weight: 500; }
+.nsx-engine-ok   { color: var(--accent-green);  font-weight: 600; font-size: 0.72rem; }
+.nsx-engine-warn { color: var(--accent-amber);  font-weight: 600; font-size: 0.72rem; }
+.nsx-engine-err  { color: var(--accent-red);    font-weight: 600; font-size: 0.72rem; }
+
+/* Empty state */
+.nsx-empty {
+  text-align: center; padding: 48px 24px;
+  background: var(--bg-card); border: 1px dashed var(--border-muted);
+  border-radius: var(--radius-lg);
+}
+.nsx-empty-icon { font-size: 2.5rem; margin-bottom: 12px; }
+.nsx-empty-title { font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+.nsx-empty-desc  { font-size: 0.8rem; color: var(--text-secondary); }
+
+/* Code block */
+.nsx-code {
+  background: #0a0f1a; border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px; font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem; color: #a8d8ea; line-height: 1.7;
+  overflow-x: auto;
+}
+
+/* Progress bar */
+.nsx-progress-wrap { background: rgba(255,255,255,0.05); border-radius: 20px; height: 6px; overflow: hidden; }
+.nsx-progress-fill { height: 100%; border-radius: 20px; background: var(--grad-primary); transition: width 0.4s ease; }
+
+/* Table override */
+thead tr th { background: var(--bg-elevated) !important; color: var(--text-secondary) !important; font-size: 0.75rem !important; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Plotly charts transparent bg by default */
+.js-plotly-plot .plotly .bg { fill: transparent !important; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* Hide Streamlit default UI chrome */
+#MainMenu { visibility: hidden; }
+footer    { visibility: hidden; }
+header    { visibility: hidden; }
+
 </style>
 """, unsafe_allow_html=True)
 
-# Hero Header
-st.markdown("""
-<div class="hero-banner">
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-        <div>
-            <div class="hero-title">Neural Studio X</div>
-            <div class="hero-subtitle">Production-Grade ML Studio · Real Training Pipelines · SHAP Explainability · AutoML Engine</div>
-        </div>
-        <div style="margin-top: 10px;">
-            <div class="status-pill"><div class="status-dot"></div> PRODUCTION MODE (v3.1)</div>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+def section(icon, title, desc="", icon_class="nsx-icon-blue"):
+    st.markdown(f"""
+    <div class="nsx-section-header">
+      <div class="nsx-section-icon {icon_class}">{icon}</div>
+      <div><div class="nsx-section-title">{title}</div>
+      {"<div class='nsx-section-desc'>"+desc+"</div>" if desc else ""}</div>
+    </div>""", unsafe_allow_html=True)
 
+def metric_card(label, value, sub="", accent="blue"):
+    st.markdown(f"""<div class="nsx-card nsx-card-accent-{accent}">
+      <div class="nsx-card-label">{label}</div>
+      <div class="nsx-card-value">{value}</div>
+      {"<div class='nsx-card-sub'>"+sub+"</div>" if sub else ""}
+    </div>""", unsafe_allow_html=True)
 
-# ============================================================
-# DATA GENERATION
-# ============================================================
-@st.cache_data
-def get_house_data():
-    np.random.seed(42)
-    n = 800
-    gr_liv = np.random.randint(600, 4000, size=n)
-    qual   = np.random.randint(1, 11, size=n)
-    bsmt   = np.random.randint(0, 2500, size=n)
-    year   = np.random.randint(1940, 2023, size=n)
-    full_bath = np.random.randint(1, 4, size=n)
-    half_bath = np.random.randint(0, 2, size=n)
-    neigh  = np.random.choice(['CollgCr','Veenker','Crawfor','NoRidge','Mitchel'], size=n)
-    price  = (30000 + gr_liv*65 + qual*16000 + bsmt*45 + (year-1940)*560
-              + full_bath*7500 + np.random.normal(0, 11000, n))
-    price  = np.maximum(price, 50000)
-    return pd.DataFrame({
-        'GrLivArea': gr_liv, 'OverallQual': qual, 'TotalBsmtSF': bsmt,
-        'YearBuilt': year, 'FullBath': full_bath, 'HalfBath': half_bath,
-        'Neighborhood': neigh, 'SalePrice': price
-    })
+def empty_state(icon, title, desc):
+    st.markdown(f"""<div class="nsx-empty">
+      <div class="nsx-empty-icon">{icon}</div>
+      <div class="nsx-empty-title">{title}</div>
+      <div class="nsx-empty-desc">{desc}</div>
+    </div>""", unsafe_allow_html=True)
 
-@st.cache_data
-def get_digit_data():
-    np.random.seed(42)
-    n = 1000
-    labels = np.random.randint(0, 10, size=n)
-    pixels = np.random.randint(0, 256, size=(n, 784))
-    df = pd.DataFrame(pixels, columns=[f'pixel{i}' for i in range(784)])
-    df.insert(0, 'label', labels)
-    return df
+def chart_cfg(fig):
+    """Apply consistent dark theme to any plotly figure."""
+    fig.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(8,12,20,0.6)',
+        font=dict(family='Inter', color='#8b97b5', size=11),
+        margin=dict(l=10, r=10, t=36, b=10),
+        title_font=dict(size=13, color='#f0f4ff', family='Inter'),
+        legend=dict(bgcolor='rgba(0,0,0,0)', bordercolor='rgba(255,255,255,0.05)', borderwidth=1),
+        xaxis=dict(gridcolor='rgba(255,255,255,0.04)', linecolor='rgba(255,255,255,0.08)'),
+        yaxis=dict(gridcolor='rgba(255,255,255,0.04)', linecolor='rgba(255,255,255,0.08)'),
+    )
+    return fig
 
-
-# ============================================================
-# REAL ML PIPELINE BUILDER
-# ============================================================
-def build_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Real feature engineering on house prices data."""
-    out = df.copy()
-    if 'TotalBsmtSF' in out and 'GrLivArea' in out:
-        out['TotalSF']   = out['TotalBsmtSF'] + out['GrLivArea']
-    if 'FullBath' in out:
-        half = out['HalfBath'] if 'HalfBath' in out else 0
-        out['TotalBath'] = out['FullBath'] + 0.5 * half
-    if 'YearBuilt' in out:
-        out['HouseAge']  = 2026 - out['YearBuilt']
-    return out
-
-def get_pipeline(algo_name: str, random_state: int = 42):
-    """Return a real Scikit-Learn Pipeline for the given algorithm."""
-    if algo_name == "GradientBoostingRegressor":
-        model = GradientBoostingRegressor(n_estimators=150, learning_rate=0.08,
-                                          max_depth=4, random_state=random_state)
-    elif algo_name == "RandomForestRegressor":
-        model = RandomForestRegressor(n_estimators=150, max_depth=14,
-                                      random_state=random_state)
-    else:
-        model = Ridge(alpha=1.0)
-
-    return Pipeline([
-        ('imputer', SimpleImputer(strategy='median')),
-        ('scaler',  StandardScaler()),
-        ('model',   model)
-    ])
-
-
-def run_kfold(df: pd.DataFrame, algo_name: str, n_splits: int = 5):
-    """Real K-Fold cross-validation returning per-fold RMSLE and trained model."""
-    fe_df   = build_features(df)
-    num_cols = [c for c in fe_df.select_dtypes(include=[np.number]).columns if c != 'SalePrice']
-    X = fe_df[num_cols].values
-    y = np.log1p(fe_df['SalePrice'].values)
-
-    kf     = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-    scores = []
-    model  = None
-    for fold, (tr, val) in enumerate(kf.split(X)):
-        pipe = get_pipeline(algo_name)
-        pipe.fit(X[tr], y[tr])
-        preds = pipe.predict(X[val])
-        rmsle = np.sqrt(mean_squared_log_error(np.expm1(y[val]), np.expm1(preds)))
-        scores.append(rmsle)
-        model = pipe  # keep last fold model
-        logger.info(f"Fold {fold+1}/{n_splits} | {algo_name} | RMSLE={rmsle:.4f}")
-    return scores, model, num_cols
-
-
-# ============================================================
-# SIDEBAR
-# ============================================================
-# ─── Authentication ─────────────────────────────────────────
-_authenticator = build_authenticator()
+# ─────────────────────────────────────────────────────────────────────────────
+# AUTHENTICATION
+# ─────────────────────────────────────────────────────────────────────────────
+_authenticator        = build_authenticator()
 _username, _authenticated = render_login(_authenticator)
 
 if not _authenticated:
-    st.stop()  # Block entire app if not logged in
+    st.stop()
 
-render_logout(_authenticator, _username)
-
-# ─── Control Center ──────────────────────────────────────────
-st.sidebar.markdown("## ⚙️ Control Center")
-dataset_choice = st.sidebar.selectbox(
-    "Active Dataset / Project",
-    ["🏠 House Prices (Tabular Regression)", "🧠 Digit Recognizer (PyTorch CV)", "📁 Upload Custom CSV"]
-)
-
-if dataset_choice == "🏠 House Prices (Tabular Regression)":
-    raw_df    = get_house_data()
-    mode_type = "regression"
-elif dataset_choice == "🧠 Digit Recognizer (PyTorch CV)":
-    raw_df    = get_digit_data()
-    mode_type = "cv"
-else:
-    uploaded = st.sidebar.file_uploader("Upload CSV File", type=["csv"])
-    if uploaded:
-        try:
-            raw_df = pd.read_csv(uploaded)
-            st.sidebar.success(f"Loaded '{uploaded.name}' ({len(raw_df)} rows)")
-        except Exception as e:
-            st.sidebar.error(f"Error: {e}")
-            raw_df = get_house_data()
-        mode_type = "custom"
-    else:
-        raw_df    = get_house_data()
-        mode_type = "regression"
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🛠️ Engine Status")
-st.sidebar.markdown(f"- **PyTorch**: {'🟢 Ready' if HAS_TORCH else '🟡 CPU Mode'}")
-st.sidebar.markdown(f"- **Scikit-Learn**: {'🟢 Ready' if HAS_SKLEARN else '🔴 Missing'}")
-st.sidebar.markdown(f"- **SHAP Explainer**: {'🟢 Real SHAP' if HAS_SHAP else '🟡 Approximate'}")
-st.sidebar.markdown(f"- **Drawing Canvas**: {'🟢 Ready' if HAS_CANVAS else '🟡 Fallback'}")
-
-# Live DB stats in sidebar
+# ─────────────────────────────────────────────────────────────────────────────
+# TOPBAR
+# ─────────────────────────────────────────────────────────────────────────────
 _db_stats = get_stats()
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 📊 Session Stats")
-st.sidebar.markdown(f"- 🧪 **Experiments**: {_db_stats['total_experiments']}")
-st.sidebar.markdown(f"- 🔮 **Predictions logged**: {_db_stats['total_predictions']}")
-st.sidebar.markdown(f"- 🏆 **Best RMSLE**: {_db_stats['best_rmsle']}")
+st.markdown(f"""
+<div class="nsx-topbar">
+  <div class="nsx-brand">
+    <div class="nsx-logo-mark">⚡</div>
+    <span class="nsx-brand-name">Neural Studio X</span>
+    <span class="nsx-brand-ver">v3.3</span>
+  </div>
+  <div class="nsx-status-row">
+    <span class="nsx-badge nsx-badge-green"><span class="nsx-dot"></span>API Live :8000</span>
+    <span class="nsx-badge nsx-badge-blue"><span class="nsx-dot"></span>{_db_stats['total_experiments']} Experiments</span>
+    <span class="nsx-badge nsx-badge-blue">👤 {_username}</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SIDEBAR
+# ─────────────────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown(f"""
+    <div class="nsx-profile">
+      <div class="nsx-profile-avatar">{''.join([w[0] for w in _username.split('-')[:2]]).upper()}</div>
+      <div class="nsx-profile-name">{_username.title()}</div>
+      <div class="nsx-profile-role">ML Engineer · Neural Studio X</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-# ============================================================
+    render_logout(_authenticator, _username)
+
+    st.markdown("**Dataset**")
+    dataset_choice = st.selectbox(
+        "Active Project", label_visibility="collapsed",
+        options=["🏠 House Prices — Regression", "🧠 Digit Recognizer — CV", "📁 Upload Custom CSV"]
+    )
+
+    if dataset_choice == "🏠 House Prices — Regression":
+        raw_df    = get_house_data_df()
+        mode_type = "regression"
+    elif dataset_choice == "🧠 Digit Recognizer — CV":
+        np.random.seed(42)
+        n = 1000
+        labels = np.random.randint(0, 10, size=n)
+        pixels = np.random.randint(0, 256, size=(n, 784))
+        d = pd.DataFrame(pixels, columns=[f'pixel{i}' for i in range(784)])
+        d.insert(0, 'label', labels)
+        raw_df    = d
+        mode_type = "cv"
+    else:
+        uploaded = st.file_uploader("Upload CSV", type=["csv"], label_visibility="collapsed")
+        if uploaded:
+            try:
+                raw_df = pd.read_csv(uploaded)
+                st.success(f"✓ {len(raw_df):,} rows loaded")
+            except Exception as e:
+                st.error(str(e))
+                raw_df = get_house_data_df()
+        else:
+            raw_df = get_house_data_df()
+        mode_type = "custom"
+
+    st.markdown("<div class='nsx-divider'></div>", unsafe_allow_html=True)
+    st.markdown("**Engine Status**")
+    sk_status  = ("🟢", "Ready",   "nsx-engine-ok")   if HAS_SKLEARN else ("🔴", "Missing", "nsx-engine-err")
+    sh_status  = ("🟢", "Ready",   "nsx-engine-ok")   if HAS_SHAP    else ("🟡", "Optional","nsx-engine-warn")
+    jb_status  = ("🟢", "Ready",   "nsx-engine-ok")   if HAS_JOBLIB  else ("🔴", "Missing", "nsx-engine-err")
+    cv_status  = ("🟢", "Ready",   "nsx-engine-ok")   if HAS_CANVAS  else ("🟡", "Optional","nsx-engine-warn")
+    st.markdown(f"""
+    <div class="nsx-engine-row">
+      <div class="nsx-engine-item"><span class="nsx-engine-name">Scikit-Learn</span><span class="{sk_status[2]}">{sk_status[0]} {sk_status[1]}</span></div>
+      <div class="nsx-engine-item"><span class="nsx-engine-name">SHAP</span><span class="{sh_status[2]}">{sh_status[0]} {sh_status[1]}</span></div>
+      <div class="nsx-engine-item"><span class="nsx-engine-name">Joblib</span><span class="{jb_status[2]}">{jb_status[0]} {jb_status[1]}</span></div>
+      <div class="nsx-engine-item"><span class="nsx-engine-name">Canvas</span><span class="{cv_status[2]}">{cv_status[0]} {cv_status[1]}</span></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<div class='nsx-divider'></div>", unsafe_allow_html=True)
+    st.markdown("**Session Stats**")
+    st.markdown(f"""
+    <div class="nsx-engine-row">
+      <div class="nsx-engine-item"><span class="nsx-engine-name">Experiments</span><span class="nsx-engine-ok">{_db_stats['total_experiments']}</span></div>
+      <div class="nsx-engine-item"><span class="nsx-engine-name">Predictions</span><span class="nsx-engine-ok">{_db_stats['total_predictions']}</span></div>
+      <div class="nsx-engine-item"><span class="nsx-engine-name">Best RMSLE</span><span class="nsx-engine-ok">{_db_stats['best_rmsle'] or '—'}</span></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────────────────────────────────────
 # TABS
-# ============================================================
-tab_eda, tab_fe, tab_clean, tab_inf, tab_train, tab_automl, tab_shap, tab_exp, tab_deploy, tab_streak = st.tabs([
-    "📊 EDA & Analytics",
-    "⚙️ Feature Workshop",
-    "🧹 Data Cleaner",
-    "🔮 Inference Playground",
-    "⚡ Real Trainer",
-    "🏆 AutoML Tournament",
-    "🛡️ SHAP (Real)",
-    "📈 Experiment Tracker",
-    "🚀 Kaggle & Deploy",
-    "🎖️ Streak & Portfolio"
+# ─────────────────────────────────────────────────────────────────────────────
+tab_eda, tab_train, tab_inf, tab_automl, tab_shap, tab_exp, tab_deploy = st.tabs([
+    "📊  Data Explorer",
+    "⚡  Model Trainer",
+    "🔮  Inference Lab",
+    "🏆  AutoML",
+    "🛡️  Explainability",
+    "📈  Experiments",
+    "🚀  Deploy & API",
 ])
 
-
-# ─────────────────────────────────────────────────────────────
-# TAB 1 — EDA
-# ─────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 1 — DATA EXPLORER
+# ═══════════════════════════════════════════════════════════════════════════════
 with tab_eda:
-    st.markdown("### 📊 Automated Exploratory Data Analysis")
-    c1,c2,c3,c4 = st.columns(4)
-    c1.markdown(f'<div class="glass-card"><div class="card-label">Rows</div><div class="card-value">{raw_df.shape[0]:,}</div></div>', unsafe_allow_html=True)
-    c2.markdown(f'<div class="glass-card"><div class="card-label">Columns</div><div class="card-value">{raw_df.shape[1]:,}</div></div>', unsafe_allow_html=True)
-    c3.markdown(f'<div class="glass-card"><div class="card-label">Numeric</div><div class="card-value">{len(raw_df.select_dtypes(include=[np.number]).columns)}</div></div>', unsafe_allow_html=True)
-    c4.markdown(f'<div class="glass-card"><div class="card-label">Categorical</div><div class="card-value">{len(raw_df.select_dtypes(include=["object"]).columns)}</div></div>', unsafe_allow_html=True)
+    section("📊", "Data Explorer", "Automated EDA · distributions · correlation · 3D scatter", "nsx-icon-blue")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.dataframe(raw_df.head(10), use_container_width=True)
+    # Summary metrics
+    num_cols_all = raw_df.select_dtypes(include=[np.number]).columns.tolist()
+    cat_cols_all = raw_df.select_dtypes(include=["object"]).columns.tolist()
+    miss_pct     = (raw_df.isnull().sum().sum() / raw_df.size * 100)
 
-    num_cols = raw_df.select_dtypes(include=[np.number]).columns.tolist()
-    if num_cols:
-        sel = st.selectbox("Feature for Distribution Analysis", num_cols, index=len(num_cols)-1)
-        ca, cb = st.columns(2)
-        fig1 = px.histogram(raw_df, x=sel, nbins=35, template="plotly_dark",
-                            title=f"Raw {sel}", color_discrete_sequence=['#00f2fe'])
-        fig1.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        ca.plotly_chart(fig1, use_container_width=True)
+    st.markdown('<div class="nsx-metric-row nsx-metric-row-4">', unsafe_allow_html=True)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: metric_card("Rows",        f"{raw_df.shape[0]:,}",   "Total samples",        "blue")
+    with c2: metric_card("Features",    f"{raw_df.shape[1]:,}",   "Columns",              "purple")
+    with c3: metric_card("Numeric",     f"{len(num_cols_all)}",   "Quantitative columns", "green")
+    with c4: metric_card("Missing",     f"{miss_pct:.1f}%",       "Data quality",         "amber" if miss_pct > 5 else "green")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        if (raw_df[sel] > 0).all():
-            fig2 = px.histogram(x=np.log1p(raw_df[sel]), nbins=35, template="plotly_dark",
-                                title=f"log1p({sel})", color_discrete_sequence=['#00ff87'])
-            fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            cb.plotly_chart(fig2, use_container_width=True)
+    # Data preview
+    with st.expander("🗂️  Raw Data Preview (first 10 rows)", expanded=False):
+        st.dataframe(raw_df.head(10), use_container_width=True, height=280)
 
-        if len(num_cols) >= 3:
-            st.markdown("#### 🌐 3D Feature Space")
-            fig3d = px.scatter_3d(raw_df, x=num_cols[0], y=num_cols[1], z=num_cols[-1],
-                                  color=num_cols[-1], template="plotly_dark",
-                                  color_continuous_scale="turbo")
-            fig3d.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig3d, use_container_width=True)
+    st.markdown("<div class='nsx-divider'></div>", unsafe_allow_html=True)
 
+    # Distribution analysis
+    section("📉", "Feature Distribution", icon_class="nsx-icon-purple")
+    if num_cols_all:
+        d1, d2 = st.columns([1, 3])
+        with d1:
+            sel_feat = st.selectbox("Feature", num_cols_all, index=len(num_cols_all)-1)
+            show_log = st.checkbox("Show log1p transform", value=True)
+            n_bins   = st.slider("Bins", 15, 80, 35, step=5)
+        with d2:
+            if show_log and (raw_df[sel_feat] > 0).all():
+                fc1, fc2 = st.columns(2)
+                with fc1:
+                    fig = px.histogram(raw_df, x=sel_feat, nbins=n_bins, template="plotly_dark",
+                                       title=f"Raw · {sel_feat}", color_discrete_sequence=["#00d4ff"])
+                    st.plotly_chart(chart_cfg(fig), use_container_width=True)
+                with fc2:
+                    fig2 = px.histogram(x=np.log1p(raw_df[sel_feat]), nbins=n_bins, template="plotly_dark",
+                                        title=f"log₁₊ₓ · {sel_feat}", color_discrete_sequence=["#00e5a0"])
+                    st.plotly_chart(chart_cfg(fig2), use_container_width=True)
+            else:
+                fig = px.histogram(raw_df, x=sel_feat, nbins=n_bins, template="plotly_dark",
+                                   title=f"Distribution · {sel_feat}", color_discrete_sequence=["#00d4ff"])
+                st.plotly_chart(chart_cfg(fig), use_container_width=True)
 
-# ─────────────────────────────────────────────────────────────
-# TAB 2 — FEATURE WORKSHOP
-# ─────────────────────────────────────────────────────────────
-with tab_fe:
-    st.markdown("### ⚙️ Feature Engineering Workshop")
-    fe_df = build_features(raw_df)
-    num_cols_fe = fe_df.select_dtypes(include=[np.number]).columns.tolist()
+    st.markdown("<div class='nsx-divider'></div>", unsafe_allow_html=True)
 
-    cfe1, cfe2 = st.columns(2)
-    with cfe1:
-        st.markdown("#### Custom Feature Creator")
-        if len(num_cols_fe) >= 2:
-            f1 = st.selectbox("Feature A", num_cols_fe, index=0)
-            f2 = st.selectbox("Feature B", num_cols_fe, index=min(1, len(num_cols_fe)-1))
-            op = st.selectbox("Operation", ["A + B", "A - B", "A × B", "A / B"])
-            name_map = {"A + B": f"{f1}_plus_{f2}", "A - B": f"{f1}_minus_{f2}",
-                        "A × B": f"{f1}_x_{f2}", "A / B": f"{f1}_div_{f2}"}
-            new_name = name_map[op]
-            if   op == "A + B": fe_df[new_name] = fe_df[f1] + fe_df[f2]
-            elif op == "A - B": fe_df[new_name] = fe_df[f1] - fe_df[f2]
-            elif op == "A × B": fe_df[new_name] = fe_df[f1] * fe_df[f2]
-            else:                fe_df[new_name] = fe_df[f1] / (fe_df[f2] + 1e-9)
-            st.success(f"✅ Created feature: `{new_name}`")
+    # Correlation heatmap
+    if len(num_cols_all) > 2:
+        section("🌐", "Correlation Matrix", icon_class="nsx-icon-green")
+        corr_cols = num_cols_all[:12]  # cap at 12 for readability
+        corr_mat  = raw_df[corr_cols].corr()
+        fig_heat  = px.imshow(corr_mat, template="plotly_dark", color_continuous_scale="RdBu_r",
+                               aspect="auto", title="Feature Correlation Heatmap",
+                               zmin=-1, zmax=1)
+        st.plotly_chart(chart_cfg(fig_heat), use_container_width=True)
 
-    with cfe2:
-        if len(num_cols_fe) > 1:
-            tgt = st.selectbox("Target for Correlation", num_cols_fe, index=len(num_cols_fe)-1)
-            corrs = fe_df[num_cols_fe].corr()[tgt].drop(tgt).sort_values()
-            fig_c = px.bar(x=corrs.values, y=corrs.index, orientation='h', template="plotly_dark",
-                           color=corrs.values, color_continuous_scale="electric",
-                           title=f"Correlations with {tgt}")
-            fig_c.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_c, use_container_width=True)
-
-
-# ─────────────────────────────────────────────────────────────
-# TAB 3 — DATA CLEANER
-# ─────────────────────────────────────────────────────────────
-with tab_clean:
-    st.markdown("### 🧹 Data Cleaner & Outlier Sanitizer")
-    clean_df = raw_df.copy()
-    nc = clean_df.select_dtypes(include=[np.number]).columns.tolist()
-    if nc:
-        cc1, cc2 = st.columns(2)
-        with cc1:
-            sel_c = st.selectbox("Feature to Sanitize", nc, index=len(nc)-1)
-            mult  = st.slider("IQR Multiplier", 1.0, 3.5, 1.5, 0.25)
-            q1, q3 = clean_df[sel_c].quantile(0.25), clean_df[sel_c].quantile(0.75)
-            iqr    = q3 - q1
-            lb, ub = q1 - mult*iqr, q3 + mult*iqr
-            n_out  = ((clean_df[sel_c] < lb) | (clean_df[sel_c] > ub)).sum()
-            st.warning(f"**{n_out} outliers** detected ({n_out/len(clean_df)*100:.1f}%)")
-            if st.button("✨ Clip Outliers"):
-                clean_df[sel_c] = np.clip(clean_df[sel_c], lb, ub)
-                st.success("Outliers clipped!")
-        with cc2:
-            fig_box = go.Figure()
-            fig_box.add_trace(go.Box(y=raw_df[sel_c],   name="Original", marker_color="#ff0844"))
-            fig_box.add_trace(go.Box(y=clean_df[sel_c], name="Sanitized", marker_color="#00ff87"))
-            fig_box.update_layout(template="plotly_dark", title=f"Boxplot: {sel_c}",
-                                  paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_box, use_container_width=True)
+    # 3D scatter
+    if len(num_cols_all) >= 3:
+        section("🔭", "3D Feature Space", icon_class="nsx-icon-amber")
+        s1, s2, s3, s4 = st.columns(4)
+        ax = s1.selectbox("X axis", num_cols_all, index=0)
+        ay = s2.selectbox("Y axis", num_cols_all, index=1)
+        az = s3.selectbox("Z axis", num_cols_all, index=len(num_cols_all)-1)
+        ac = s4.selectbox("Color by", num_cols_all, index=len(num_cols_all)-1)
+        fig_3d = px.scatter_3d(raw_df.sample(min(500, len(raw_df))), x=ax, y=ay, z=az,
+                                color=ac, template="plotly_dark", color_continuous_scale="viridis",
+                                title="3D Feature Scatter (500 sample)")
+        fig_3d.update_traces(marker=dict(size=2, opacity=0.8))
+        st.plotly_chart(chart_cfg(fig_3d), use_container_width=True)
 
 
-# ─────────────────────────────────────────────────────────────
-# TAB 4 — LIVE INFERENCE PLAYGROUND (real model)
-# ─────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 2 — MODEL TRAINER
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_train:
+    section("⚡", "Real Model Trainer", "Genuine K-Fold cross-validation · no simulated scores", "nsx-icon-blue")
+
+    if mode_type != "regression" or not HAS_SKLEARN:
+        empty_state("⚠️", "Dataset Not Compatible", "Switch to the House Prices dataset in the sidebar to use the trainer.")
+    else:
+        cfg_col, result_col = st.columns([1, 1], gap="large")
+
+        with cfg_col:
+            st.markdown("#### ⚙️ Training Configuration")
+            train_algo = st.selectbox("Algorithm",
+                ["GradientBoostingRegressor", "RandomForestRegressor", "Ridge"],
+                help="All are real Scikit-Learn models with proper pipelines")
+            cv_folds = st.slider("K-Fold Splits", min_value=3, max_value=10, value=5,
+                                  help="More folds = more robust estimate, longer training")
+
+            # Show algo description
+            algo_desc = {
+                "GradientBoostingRegressor": "🎯 Best accuracy — sequential ensemble of decision trees with gradient descent. Slower to train.",
+                "RandomForestRegressor":     "🌲 Robust — parallel ensemble, less overfitting. Good general baseline.",
+                "Ridge":                     "⚡ Fastest — L2-regularized linear regression. Highly explainable."
+            }
+            st.info(algo_desc[train_algo])
+
+            run_btn = st.button("🚀  Start Training", type="primary", use_container_width=True)
+
+        with result_col:
+            st.markdown("#### 📊 Training Results")
+            if run_btn:
+                prog = st.progress(0, text="Initialising pipeline...")
+                status = st.empty()
+                for i in range(3):
+                    prog.progress((i+1)*25, text=f"Running fold {i+1}/{cv_folds}…")
+
+                with st.spinner(f"Running {cv_folds}-Fold CV · {train_algo}…"):
+                    scores, trained_model, feat_cols = run_kfold(raw_df, train_algo, cv_folds)
+
+                prog.progress(100, text="Complete!")
+                mean_s, std_s = np.mean(scores), np.std(scores)
+
+                # Result summary cards
+                r1, r2 = st.columns(2)
+                with r1: metric_card("Mean RMSLE", f"{mean_s:.4f}", f"± {std_s:.4f} std", "green")
+                with r2: metric_card("Folds", str(cv_folds), f"{train_algo[:8]}…", "blue")
+
+                # Per-fold bar chart
+                fold_df = pd.DataFrame({'Fold': [f"F{i+1}" for i in range(cv_folds)], 'RMSLE': scores})
+                fig_f = px.bar(fold_df, x='Fold', y='RMSLE', template="plotly_dark",
+                               color='RMSLE', color_continuous_scale="blues",
+                               title="RMSLE per Fold")
+                fig_f.add_hline(y=mean_s, line_dash="dash", line_color="#00e5a0",
+                                annotation_text=f"Mean={mean_s:.4f}", annotation_position="top right")
+                st.plotly_chart(chart_cfg(fig_f), use_container_width=True)
+
+                # Save model
+                if HAS_JOBLIB:
+                    mpath = f"model_{train_algo.lower()}.pkl"
+                    joblib.dump({'model': trained_model, 'features': feat_cols}, mpath)
+                    st.session_state.update({'trained_model': trained_model,
+                                             'trained_features': feat_cols, 'last_algo': train_algo})
+
+                # Persist experiment
+                run_id = str(uuid.uuid4())[:8]
+                save_experiment(run_id, _username, train_algo, cv_folds, mean_s, std_s)
+                st.success(f"✅ Run `{run_id}` — saved to DB · model serialised to `{mpath}`")
+                logger.info(f"Training complete | {run_id} | {train_algo} | RMSLE={mean_s:.4f}")
+            else:
+                empty_state("⚡", "Configure & Train", "Select your algorithm and click Start Training to begin a real cross-validated training run.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 3 — INFERENCE LAB
+# ═══════════════════════════════════════════════════════════════════════════════
 with tab_inf:
-    st.markdown("### 🔮 Live Model Inference Playground")
-    st.caption("Trains a real model on the fly and serves live predictions from your inputs.")
+    section("🔮", "Inference Lab", "Live predictions from real trained models · every prediction logged to DB", "nsx-icon-green")
 
-    ci1, ci2 = st.columns([1, 1])
-    with ci1:
-        st.markdown("#### 🎛️ Input Features")
-        in_liv  = st.slider("Above Ground Living Area (sqft)", 500, 5000, 1850, 50)
-        in_qual = st.slider("Overall Quality (1–10)", 1, 10, 7)
-        in_bsmt = st.slider("Total Basement Area (sqft)", 0, 3500, 1050, 50)
-        in_year = st.slider("Year Built", 1920, 2025, 2005)
-        in_bath = st.slider("Full Bathrooms", 1, 4, 2)
-        in_half = st.slider("Half Bathrooms", 0, 2, 1)
-        inf_algo = st.selectbox("Model", ["GradientBoostingRegressor", "RandomForestRegressor", "Ridge"])
+    if mode_type != "regression" or not HAS_SKLEARN:
+        empty_state("🔮", "Switch Dataset", "Select House Prices dataset to use live inference.")
+    else:
+        inp_col, out_col = st.columns([1, 1], gap="large")
 
-    with ci2:
-        st.markdown("#### 🔮 Real-Time Prediction")
-        if mode_type == "regression" and HAS_SKLEARN:
-            fe_df_inf  = build_features(raw_df)
-            num_feats  = [c for c in fe_df_inf.select_dtypes(include=[np.number]).columns if c != 'SalePrice']
-            X_all = fe_df_inf[num_feats].values
-            y_all = np.log1p(fe_df_inf['SalePrice'].values)
+        with inp_col:
+            st.markdown("#### 🎛️ Feature Inputs")
+            in_liv  = st.slider("Living Area (sqft)",    500, 5000, 1850, 50)
+            in_qual = st.slider("Overall Quality (1–10)", 1,   10,    7)
+            in_bsmt = st.slider("Basement Area (sqft)",  0,   3500, 1050, 50)
+            in_year = st.slider("Year Built",           1920, 2025, 2005)
+            in_bath = st.slider("Full Bathrooms",         1,    4,    2)
+            in_half = st.slider("Half Bathrooms",         0,    2,    1)
+            inf_algo= st.selectbox("Model",
+                ["GradientBoostingRegressor", "RandomForestRegressor", "Ridge"])
 
+        with out_col:
+            st.markdown("#### 🔮 Live Prediction")
+            fe_inf   = build_features(raw_df)
+            nfeats   = [c for c in fe_inf.select_dtypes(include=[np.number]).columns if c != 'SalePrice']
+            X_all    = fe_inf[nfeats].values
+            y_all    = np.log1p(fe_inf['SalePrice'].values)
             pipe_inf = get_pipeline(inf_algo)
             pipe_inf.fit(X_all, y_all)
 
-            # Build input row matching training columns
-            row = {c: 0 for c in num_feats}
+            row = {c: 0 for c in nfeats}
             row.update({'GrLivArea': in_liv, 'OverallQual': in_qual,
                         'TotalBsmtSF': in_bsmt, 'YearBuilt': in_year,
                         'FullBath': in_bath, 'HalfBath': in_half,
                         'TotalSF': in_bsmt + in_liv,
                         'TotalBath': in_bath + 0.5*in_half,
                         'HouseAge': 2026 - in_year})
-            X_row = np.array([[row.get(c, 0) for c in num_feats]])
-            pred_log = pipe_inf.predict(X_row)[0]
-            pred_price = np.expm1(pred_log)
+            X_row      = np.array([[row.get(c, 0) for c in nfeats]])
+            pred_price = float(np.expm1(pipe_inf.predict(X_row)[0]))
             err_margin = pred_price * 0.065
 
-            # ── Log prediction to SQLite ──────────────────────
-            save_prediction(
-                username=_username,
-                algorithm=inf_algo,
-                input_features={'GrLivArea': in_liv, 'OverallQual': in_qual,
-                                'TotalBsmtSF': in_bsmt, 'YearBuilt': in_year,
-                                'FullBath': in_bath},
-                predicted_price=pred_price
-            )
+            st.markdown(f"""
+            <div class="nsx-predict-result">
+              <div class="nsx-predict-label">Predicted Sale Price</div>
+              <div class="nsx-predict-price">${pred_price:,.0f}</div>
+              <div class="nsx-predict-range">95% range &nbsp;·&nbsp; <b>${pred_price-err_margin:,.0f}</b> — <b>${pred_price+err_margin:,.0f}</b></div>
+              <div class="nsx-predict-model">{inf_algo}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            st.markdown(
-                f'<div class="glass-card" style="text-align:center; border-color:#00f2fe; margin-top:12px;">'
-                f'<div class="card-label">Predicted Sale Price</div>'
-                f'<div class="card-value" style="color:#00ff87; font-size:2.4rem;">${pred_price:,.0f}</div>'
-                f'<div style="color:#94a3b8; margin-top:8px;">95% Range: <b>${pred_price-err_margin:,.0f} — ${pred_price+err_margin:,.0f}</b></div>'
-                f'<div style="color:#64748b; font-size:0.8rem; margin-top:4px;">Model: {inf_algo}</div>'
-                f'</div>', unsafe_allow_html=True)
+            save_prediction(_username, inf_algo,
+                            {'GrLivArea': in_liv, 'OverallQual': in_qual, 'TotalBsmtSF': in_bsmt},
+                            pred_price)
 
             st.markdown("<br>", unsafe_allow_html=True)
-            contrib_df = pd.DataFrame({
-                'Feature': ['Living Area', 'Quality', 'Basement SF', 'Year Built', 'Bathrooms'],
-                'Impact ($)': [in_liv*65, in_qual*16000, in_bsmt*42, (in_year-1940)*560, (in_bath+0.5*in_half)*7500]
-            })
-            fig_ctb = px.bar(contrib_df, x='Impact ($)', y='Feature', orientation='h',
-                             template="plotly_dark", color='Impact ($)', color_continuous_scale="viridis",
-                             title="Feature Contribution Breakdown")
-            fig_ctb.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_ctb, use_container_width=True)
-        else:
-            st.info("Switch to House Prices dataset and ensure Scikit-Learn is installed.")
+
+            # Feature contribution
+            contrib = {
+                'Living Area': in_liv*65,
+                'Quality':     in_qual*16000,
+                'Basement':    in_bsmt*42,
+                'Age Factor':  (in_year-1940)*560,
+                'Bathrooms':   (in_bath + 0.5*in_half)*7500
+            }
+            c_df = pd.DataFrame(contrib.items(), columns=['Feature', 'Contribution ($)'])
+            fig_c = px.bar(c_df, x='Contribution ($)', y='Feature', orientation='h',
+                           template="plotly_dark", color='Contribution ($)',
+                           color_continuous_scale="teal", title="Feature Contribution Breakdown")
+            st.plotly_chart(chart_cfg(fig_c), use_container_width=True)
 
 
-# ─────────────────────────────────────────────────────────────
-# TAB 5 — REAL MODEL TRAINER
-# ─────────────────────────────────────────────────────────────
-with tab_train:
-    st.markdown("### ⚡ Real In-Browser Model Trainer (K-Fold Cross-Validation)")
-    st.caption("Runs genuine Scikit-Learn pipelines with real data. All scores are computed, not simulated.")
-
-    ct1, ct2 = st.columns([1, 1])
-    with ct1:
-        cv_folds = st.slider("K-Fold Splits", 3, 10, 5)
-        train_algo = st.selectbox("Algorithm", ["GradientBoostingRegressor","RandomForestRegressor","Ridge"])
-        run_btn = st.button("🚀 Train & Cross-Validate Now")
-
-    with ct2:
-        if run_btn:
-            if mode_type == "regression" and HAS_SKLEARN:
-                with st.spinner(f"Running real {cv_folds}-Fold CV with {train_algo}..."):
-                    scores, trained_model, feat_cols = run_kfold(raw_df, train_algo, cv_folds)
-
-                mean_s, std_s = np.mean(scores), np.std(scores)
-                st.success(f"✅ Training complete! Mean RMSLE: **{mean_s:.4f} ± {std_s:.4f}**")
-
-                fold_df = pd.DataFrame({'Fold': [f"Fold {i+1}" for i in range(cv_folds)], 'RMSLE': scores})
-                fig_folds = px.bar(fold_df, x='Fold', y='RMSLE', template="plotly_dark",
-                                   color='RMSLE', color_continuous_scale="bluered",
-                                   title="Real K-Fold RMSLE per Fold")
-                fig_folds.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_folds, use_container_width=True)
-
-                # Save model to session state & disk
-                model_path = f"model_{train_algo.lower()}.pkl"
-                joblib.dump({'model': trained_model, 'features': feat_cols}, model_path)
-                st.session_state['trained_model'] = trained_model
-                st.session_state['trained_features'] = feat_cols
-                st.session_state['last_algo'] = train_algo
-                st.session_state['last_score'] = mean_s
-
-                # ── Persist to SQLite ─────────────────────────
-                run_id = str(uuid.uuid4())[:8]
-                save_experiment(
-                    run_id=run_id,
-                    username=_username,
-                    algorithm=train_algo,
-                    cv_folds=cv_folds,
-                    mean_rmsle=mean_s,
-                    std_rmsle=std_s,
-                    hyperparams={'n_splits': cv_folds}
-                )
-                logger.info(f"Run {run_id} persisted | {train_algo} | RMSLE={mean_s:.4f}")
-                st.info(f"✅ Run `{run_id}` saved to database & model serialized to `{model_path}`.")
-            else:
-                st.warning("Switch to House Prices dataset or install Scikit-Learn.")
-        else:
-            st.info("Configure parameters on the left and click **Train** to start real training.")
-
-
-# ─────────────────────────────────────────────────────────────
-# TAB 6 — AutoML TOURNAMENT
-# ─────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 4 — AutoML TOURNAMENT
+# ═══════════════════════════════════════════════════════════════════════════════
 with tab_automl:
-    st.markdown("### 🏆 AutoML Tournament & Multi-Metric Radar")
+    section("🏆", "AutoML Tournament", "Benchmark all models with real K-Fold CV and rank by RMSLE", "nsx-icon-amber")
 
-    run_automl = st.button("⚡ Run Full AutoML Tournament (Real Training)")
-    if run_automl and mode_type == "regression" and HAS_SKLEARN:
-        algos     = ["GradientBoostingRegressor", "RandomForestRegressor", "Ridge"]
-        results   = []
-        prog_bar  = st.progress(0)
-        for i, algo in enumerate(algos):
-            with st.spinner(f"Training {algo}..."):
-                scores, _, _ = run_kfold(raw_df, algo, n_splits=5)
-                results.append({'Algorithm': algo, 'Mean RMSLE': round(np.mean(scores),4),
-                                'Std RMSLE': round(np.std(scores),4)})
-            prog_bar.progress((i+1)/len(algos))
-        prog_bar.empty()
+    a1, a2 = st.columns([1, 2], gap="large")
+    with a1:
+        st.markdown("#### Tournament Setup")
+        automl_folds = st.slider("CV Folds", 3, 7, 5)
+        algos_sel    = st.multiselect("Algorithms to Compare",
+            ["GradientBoostingRegressor", "RandomForestRegressor", "Ridge"],
+            default=["GradientBoostingRegressor", "RandomForestRegressor", "Ridge"])
+        run_automl   = st.button("⚡  Run Tournament", type="primary", use_container_width=True)
 
-        lb_df = pd.DataFrame(results).sort_values('Mean RMSLE')
-        lb_df.insert(0, 'Rank', range(1, len(lb_df)+1))
-        lb_df['Champion'] = ['🏆' if i == 0 else '' for i in range(len(lb_df))]
-        st.dataframe(lb_df, use_container_width=True)
-
-        fig_lb = px.bar(lb_df, x='Algorithm', y='Mean RMSLE', template="plotly_dark",
-                        color='Mean RMSLE', color_continuous_scale="rdylgn_r",
-                        title="AutoML Tournament Results (Real Scores)", error_y='Std RMSLE')
-        fig_lb.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_lb, use_container_width=True)
-    else:
-        # Show static radar while not yet run
-        st.info("Click above to run a **real** AutoML tournament. Static radar preview shown below.")
+        st.markdown("<div class='nsx-divider'></div>", unsafe_allow_html=True)
+        st.markdown("#### Capability Radar")
         fig_radar = go.Figure()
-        cats = ['Accuracy', 'Speed', 'Scalability', 'Explainability', 'Robustness']
-        fig_radar.add_trace(go.Scatterpolar(r=[95,70,85,90,92], theta=cats, fill='toself', name='GradBoost',  line_color='#00f2fe'))
-        fig_radar.add_trace(go.Scatterpolar(r=[92,80,80,85,88], theta=cats, fill='toself', name='RandomForest', line_color='#00ff87'))
-        fig_radar.add_trace(go.Scatterpolar(r=[80,95,75,95,78], theta=cats, fill='toself', name='Ridge', line_color='#f59e0b'))
-        fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0,100])),
-                                template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)',
-                                plot_bgcolor='rgba(0,0,0,0)', title="Model Capability Radar")
+        cats  = ['Accuracy', 'Speed', 'Scalability', 'Explainability', 'Robustness']
+        radars = [
+            ("GradBoost",    [95,70,85,90,92], "#00d4ff"),
+            ("RandomForest", [92,80,80,85,88], "#00e5a0"),
+            ("Ridge",        [80,95,75,95,78], "#a78bfa"),
+        ]
+        for name, vals, color in radars:
+            fig_radar.add_trace(go.Scatterpolar(r=vals+[vals[0]], theta=cats+[cats[0]],
+                fill='toself', name=name, line_color=color, opacity=0.75,
+                fillcolor=color.replace(')', ',0.08)').replace('rgb', 'rgba') if 'rgb' in color else color+'22'))
+        fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0,100],
+                                                            gridcolor='rgba(255,255,255,0.06)',
+                                                            linecolor='rgba(255,255,255,0.1)')),
+                                 template="plotly_dark", legend=dict(orientation="h"),
+                                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                                 title="Model Capability Radar", font=dict(family='Inter', color='#8b97b5'))
         st.plotly_chart(fig_radar, use_container_width=True)
 
+    with a2:
+        st.markdown("#### Results")
+        if run_automl and mode_type == "regression" and HAS_SKLEARN and algos_sel:
+            results = []
+            prog_t  = st.progress(0)
+            for i, algo in enumerate(algos_sel):
+                with st.spinner(f"Training {algo}…"):
+                    scores, _, _ = run_kfold(raw_df, algo, n_splits=automl_folds)
+                    results.append({'Algorithm': algo, 'Mean RMSLE': round(np.mean(scores),4),
+                                    'Std': round(np.std(scores),4), 'Best Fold': round(min(scores),4)})
+                prog_t.progress((i+1)/len(algos_sel))
+            prog_t.empty()
 
-# ─────────────────────────────────────────────────────────────
-# TAB 7 — REAL SHAP
-# ─────────────────────────────────────────────────────────────
+            lb = pd.DataFrame(results).sort_values('Mean RMSLE').reset_index(drop=True)
+            lb.insert(0, 'Rank', ['🥇','🥈','🥉','4th','5th'][:len(lb)])
+            st.dataframe(lb, use_container_width=True, hide_index=True)
+
+            fig_lb = px.bar(lb, x='Algorithm', y='Mean RMSLE', error_y='Std',
+                            template="plotly_dark", color='Mean RMSLE',
+                            color_continuous_scale="rdylgn_r", title="Tournament Results — Lower is Better")
+            st.plotly_chart(chart_cfg(fig_lb), use_container_width=True)
+        else:
+            empty_state("🏆", "Start the Tournament",
+                        "Select algorithms and click Run Tournament to benchmark them with real data.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 5 — EXPLAINABILITY
+# ═══════════════════════════════════════════════════════════════════════════════
 with tab_shap:
-    st.markdown("### 🛡️ SHAP Model Explainability (Real Values)")
+    section("🛡️", "Model Explainability", "Real feature importances from trained model weights", "nsx-icon-purple")
 
-    if 'trained_model' in st.session_state and mode_type == "regression":
-        fe_df_s  = build_features(raw_df)
-        feat_cols = st.session_state['trained_features']
-        X_shap   = fe_df_s[feat_cols].fillna(0).values
-
-        if HAS_SHAP:
-            with st.spinner("Computing real SHAP values..."):
-                try:
-                    explainer    = shap.Explainer(st.session_state['trained_model'].named_steps['model'],
-                                                   st.session_state['trained_model'].named_steps['scaler'].transform(
-                                                       st.session_state['trained_model'].named_steps['imputer'].transform(X_shap[:200])))
-                    shap_values  = explainer(st.session_state['trained_model'].named_steps['scaler'].transform(
-                                               st.session_state['trained_model'].named_steps['imputer'].transform(X_shap[:200])))
-                    mean_shap    = np.abs(shap_values.values).mean(0)
-                    shap_df_real = pd.DataFrame({'Feature': feat_cols, 'Mean |SHAP|': mean_shap}).sort_values('Mean |SHAP|')
-                    fig_shap     = px.bar(shap_df_real, x='Mean |SHAP|', y='Feature', orientation='h',
-                                          template="plotly_dark", color='Mean |SHAP|',
-                                          color_continuous_scale="plasma", title="Real SHAP Feature Importance")
-                    fig_shap.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_shap, use_container_width=True)
-                except Exception as e:
-                    st.warning(f"SHAP fast path failed ({e}). Using TreeExplainer fallback.")
-                    HAS_SHAP = False
-
-        if not HAS_SHAP:
-            # Fallback: use permutation-based feature importances
-            inner_model = st.session_state['trained_model'].named_steps['model']
-            if hasattr(inner_model, 'feature_importances_'):
-                importances = inner_model.feature_importances_
-            else:
-                importances = np.abs(getattr(inner_model, 'coef_', np.ones(len(feat_cols))))
-            shap_df_approx = pd.DataFrame({'Feature': feat_cols, 'Importance': importances}).sort_values('Importance')
-            fig_approx = px.bar(shap_df_approx, x='Importance', y='Feature', orientation='h',
-                                template="plotly_dark", color='Importance', color_continuous_scale="plasma",
-                                title="Feature Importance (from trained model)")
-            fig_approx.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_approx, use_container_width=True)
+    if 'trained_model' not in st.session_state:
+        empty_state("🛡️", "Train a Model First",
+                    "Go to the ⚡ Model Trainer tab, train any model, then return here for feature importance.")
     else:
-        st.info("👆 Train a model first in the **⚡ Real Trainer** tab, then come here for real feature importance.")
+        fe_s     = build_features(raw_df)
+        feat_cls = st.session_state['trained_features']
+        inner    = st.session_state['trained_model'].named_steps['model']
+
+        if hasattr(inner, 'feature_importances_'):
+            imp = inner.feature_importances_
+            method = "Tree Feature Importances"
+        else:
+            imp = np.abs(getattr(inner, 'coef_', np.ones(len(feat_cls))))
+            method = "Coefficient Magnitudes"
+
+        imp_df = pd.DataFrame({'Feature': feat_cls, 'Importance': imp}).sort_values('Importance')
+
+        sh1, sh2 = st.columns([2, 1])
+        with sh1:
+            fig_imp = px.bar(imp_df, x='Importance', y='Feature', orientation='h',
+                             template="plotly_dark", color='Importance',
+                             color_continuous_scale="plasma",
+                             title=f"Feature Importance ({method})")
+            fig_imp.update_layout(yaxis=dict(tickfont=dict(size=11)))
+            st.plotly_chart(chart_cfg(fig_imp), use_container_width=True)
+        with sh2:
+            st.markdown("**Top Features**")
+            top5 = imp_df.tail(5).iloc[::-1]
+            total = top5['Importance'].sum() + 1e-9
+            for _, r in top5.iterrows():
+                pct = r['Importance'] / imp_df['Importance'].sum() * 100
+                st.markdown(f"""
+                <div style="margin-bottom:10px;">
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <span style="font-size:0.8rem;color:#f0f4ff;font-weight:600">{r['Feature']}</span>
+                    <span style="font-size:0.75rem;color:#00d4ff">{pct:.1f}%</span>
+                  </div>
+                  <div class="nsx-progress-wrap">
+                    <div class="nsx-progress-fill" style="width:{pct:.0f}%"></div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
 
 
-# ─────────────────────────────────────────────────────────────
-# TAB 8 — EXPERIMENT TRACKER
-# ─────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 6 — EXPERIMENT TRACKER
+# ═══════════════════════════════════════════════════════════════════════════════
 with tab_exp:
-    st.markdown("### 📈 Experiment Tracker & Model Registry (Persistent SQLite)")
+    section("📈", "Experiment Tracker", "All runs from SQLite — persistent across sessions", "nsx-icon-green")
 
-    # ── Load from real database ───────────────────────────────
-    db_experiments = load_experiments()
-    if db_experiments:
-        exp_df = pd.DataFrame(db_experiments)
-        exp_df['champion'] = exp_df['is_champion'].map({1: '🏆 Champion', 0: ''})
-        display_cols = ['run_id', 'username', 'algorithm', 'cv_folds',
-                        'mean_rmsle', 'std_rmsle', 'champion', 'created_at']
-        st.dataframe(exp_df[display_cols], use_container_width=True)
+    db_exps = load_experiments()
+    if db_exps:
+        exp_df = pd.DataFrame(db_exps)
+        exp_df['Champion'] = exp_df['is_champion'].map({1: '🏆', 0: ''})
 
-        fig_hist = px.bar(exp_df, x='run_id', y='mean_rmsle', color='algorithm',
-                          template="plotly_dark", title="All Experiment Runs (DB)",
-                          error_y='std_rmsle')
-        fig_hist.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_hist, use_container_width=True)
+        e1, e2, e3 = st.columns(3)
+        best = exp_df['mean_rmsle'].min()
+        with e1: metric_card("Total Runs",    str(len(exp_df)),        "All experiments",         "blue")
+        with e2: metric_card("Best RMSLE",    f"{best:.4f}",           exp_df.loc[exp_df['mean_rmsle'].idxmin(),'algorithm'], "green")
+        with e3: metric_card("Unique Models", str(exp_df['algorithm'].nunique()), "Distinct algorithms", "purple")
 
-        # Show prediction log
-        st.markdown("#### 🔮 Prediction Log")
-        pred_history = load_predictions(username=_username)
-        if pred_history:
-            st.dataframe(pd.DataFrame(pred_history)[['algorithm','predicted_price','created_at']], use_container_width=True)
+        st.markdown("<div class='nsx-divider'></div>", unsafe_allow_html=True)
+
+        # Registry table
+        disp = exp_df[['Champion','run_id','username','algorithm','cv_folds','mean_rmsle','std_rmsle','created_at']].copy()
+        disp.columns = ['🏆','Run ID','User','Algorithm','Folds','RMSLE','Std','Timestamp']
+        st.dataframe(disp, use_container_width=True, hide_index=True)
+
+        # RMSLE trend
+        fig_trend = px.scatter(exp_df, x='created_at', y='mean_rmsle', color='algorithm',
+                               template="plotly_dark", title="RMSLE Over Time",
+                               error_y='std_rmsle', size_max=10)
+        fig_trend.update_traces(marker=dict(size=8))
+        st.plotly_chart(chart_cfg(fig_trend), use_container_width=True)
+
+        # Prediction log
+        st.markdown("<div class='nsx-divider'></div>", unsafe_allow_html=True)
+        section("🔮", "Prediction Log", "Latest inference requests", "nsx-icon-purple")
+        preds = load_predictions(_username)
+        if preds:
+            p_df = pd.DataFrame(preds)[['algorithm','predicted_price','created_at']]
+            p_df.columns = ['Algorithm','Predicted ($)','Timestamp']
+            p_df['Predicted ($)'] = p_df['Predicted ($)'].apply(lambda x: f"${x:,.0f}")
+            st.dataframe(p_df, use_container_width=True, hide_index=True)
         else:
-            st.info("No predictions logged yet. Use the **🔮 Inference Playground** tab.")
+            empty_state("🔮", "No Predictions Yet", "Use the Inference Lab to generate predictions.")
     else:
-        st.info("No experiments yet. Run training in the **⚡ Real Trainer** tab to populate this registry.")
+        empty_state("📈", "No Experiments Yet",
+                    "Train a model in the ⚡ Model Trainer tab to start populating the registry.")
 
 
-# ─────────────────────────────────────────────────────────────
-# TAB 9 — KAGGLE & DEPLOY
-# ─────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 7 — DEPLOY & API
+# ═══════════════════════════════════════════════════════════════════════════════
 with tab_deploy:
-    st.markdown("### 🚀 Kaggle Submission & Deployment")
-    ce1, ce2 = st.columns(2)
+    section("🚀", "Deploy & API", "FastAPI backend · Docker · Kaggle submission · live API docs", "nsx-icon-amber")
 
-    with ce1:
-        st.markdown("#### 💾 Kaggle Submission Generator")
-        if mode_type == "regression":
-            n_rows   = 1459
-            sub_data = pd.DataFrame({'Id': np.arange(1461, 1461+n_rows),
-                                     'SalePrice': np.round(np.random.normal(180000, 30000, size=n_rows), 2)})
-        else:
-            n_rows   = 1000
-            sub_data = pd.DataFrame({'ImageId': np.arange(1, n_rows+1),
-                                     'Label': np.random.randint(0, 10, size=n_rows)})
-        st.success(f"✅ Compliant file: {len(sub_data)} rows")
-        st.dataframe(sub_data.head(5), use_container_width=True)
-        st.download_button("💾 Download submission.csv",
-                           sub_data.to_csv(index=False).encode(),
-                           "submission.csv", "text/csv")
+    dp1, dp2 = st.columns(2, gap="large")
 
-    with ce2:
-        st.markdown("#### 🐳 Docker Deployment Commands")
-        st.code("""# Build image
+    with dp1:
+        st.markdown("#### 🐳 Docker Commands")
+        st.code("""# Build
 docker build -t neural-studio-x .
 
-# Run container
-docker run -p 8501:8501 neural-studio-x
+# Run full stack
+docker compose up -d
 
-# Deploy to HuggingFace Spaces
-# Push this repo to a HuggingFace Space
-# with SDK: streamlit
-""", language="bash")
+# Streamlit UI  → localhost:8501
+# FastAPI API   → localhost:8000
+# Swagger docs  → localhost:8000/docs""", language="bash")
 
-        st.markdown("#### 🌐 FastAPI Inference Server")
-        st.code("""from fastapi import FastAPI
-import joblib, numpy as np
+        st.markdown("#### 🌐 FastAPI Quick Start")
+        st.code(f"""# Health check
+curl http://localhost:8000/health
 
-app   = FastAPI(title="Neural Studio X API")
-bundle = joblib.load("model_gradientboostingregressor.pkl")
-model  = bundle["model"]
-feats  = bundle["features"]
+# Predict (API key required)
+curl -X POST http://localhost:8000/predict \\
+  -H "x-api-key: nsx-dev-key-change-in-prod" \\
+  -H "Content-Type: application/json" \\
+  -d '{{"GrLivArea":1850,"OverallQual":7,
+       "TotalBsmtSF":1050,"YearBuilt":2005,
+       "FullBath":2,"algorithm":"Ridge"}}'
 
-@app.post("/predict")
-def predict(data: dict):
-    row = np.array([[data.get(f, 0) for f in feats]])
-    return {"predicted_price": float(np.expm1(model.predict(row)[0]))}
-""", language="python")
+# View experiments
+curl http://localhost:8000/experiments""", language="bash")
 
+    with dp2:
+        st.markdown("#### 💾 Kaggle Submission")
+        if mode_type == "regression":
+            sub = pd.DataFrame({'Id': np.arange(1461,2920), 'SalePrice': np.round(np.random.normal(180000,30000,1459),2)})
+            col_p, col_d = st.columns(2)
+            with col_p: metric_card("Rows",    "1,459",  "Submission rows",  "green")
+            with col_d: metric_card("Columns", "2",      "Id · SalePrice",   "blue")
+            st.dataframe(sub.head(5), use_container_width=True, hide_index=True)
+            st.download_button("⬇️  Download submission.csv", sub.to_csv(index=False).encode(),
+                               "submission.csv", "text/csv", use_container_width=True)
+        else:
+            sub = pd.DataFrame({'ImageId': np.arange(1,28001), 'Label': np.random.randint(0,10,28000)})
+            st.download_button("⬇️  Download submission.csv", sub.to_csv(index=False).encode(),
+                               "submission.csv", "text/csv", use_container_width=True)
 
-# ─────────────────────────────────────────────────────────────
-# TAB 10 — STREAK & PORTFOLIO
-# ─────────────────────────────────────────────────────────────
-with tab_streak:
-    st.markdown("### 🎖️ Kaggle Daily Streak & Portfolio Hub")
-    st.markdown("#### 🏆 GitHub Repositories")
-    st.markdown("- 🧠 **[neural-studio-x](https://github.com/himanshu-2l/neural-studio-x.git)**: Production ML Studio.")
-    st.markdown("- 👁️ **[digit-recognizer-pytorch](https://github.com/himanshu-2l/digit-recognizer-pytorch.git)**: PyTorch CNN.")
-    st.markdown("- 🏠 **[house-pred-kaggle](https://github.com/himanshu-2l/house-pred-kaggle.git)**: Tabular Regression.")
-    st.markdown("#### 🔥 Daily Checklist")
-    st.checkbox("Log into Kaggle today", value=True)
-    st.checkbox("Make 1 submission", value=True)
-    st.checkbox("Upvote 1 notebook or discussion", value=False)
+        st.markdown("#### ☁️ Cloud Deployment")
+        st.markdown("""
+        <div class="nsx-card">
+          <div class="nsx-card-label">Deployment Options</div>
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
+            <div class="nsx-engine-item"><span class="nsx-engine-name">🤗 HuggingFace Spaces</span><span class="nsx-engine-ok">Free · Streamlit</span></div>
+            <div class="nsx-engine-item"><span class="nsx-engine-name">🚂 Railway.app</span><span class="nsx-engine-ok">Docker · $5/mo</span></div>
+            <div class="nsx-engine-item"><span class="nsx-engine-name">🎯 Render.com</span><span class="nsx-engine-ok">Free tier · Docker</span></div>
+            <div class="nsx-engine-item"><span class="nsx-engine-name">☁️ Google Cloud Run</span><span class="nsx-engine-ok">Serverless · Auto-scale</span></div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("#### 🔗 Links")
+        st.markdown("""
+        <div class="nsx-card">
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <a href="https://github.com/himanshu-2l/neural-studio-x" target="_blank" style="color:#00d4ff;text-decoration:none;font-size:0.83rem;">
+              📦 GitHub · himanshu-2l/neural-studio-x
+            </a>
+            <a href="http://localhost:8000/docs" target="_blank" style="color:#00e5a0;text-decoration:none;font-size:0.83rem;">
+              📡 Swagger UI · localhost:8000/docs
+            </a>
+            <a href="https://www.kaggle.com/competitions/house-prices-advanced-regression-techniques" target="_blank" style="color:#a78bfa;text-decoration:none;font-size:0.83rem;">
+              🏅 Kaggle · House Prices Competition
+            </a>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)

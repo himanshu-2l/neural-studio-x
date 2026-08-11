@@ -58,30 +58,43 @@ def build_authenticator():
 def render_login(authenticator) -> tuple[str | None, bool]:
     """
     Render login widget. Returns (username, is_authenticated).
-    Falls back gracefully if streamlit-authenticator not installed.
+    Handles both old (tuple) and new (session_state) streamlit-authenticator APIs.
+    Falls back gracefully if not installed.
     """
     if not HAS_AUTH or authenticator is None:
-        # Graceful fallback — treat everyone as authenticated guest
         return "guest", True
 
-    name, auth_status, username = authenticator.login(
-        location="sidebar",
-        fields={
-            "Form name": "🔐 Neural Studio X Login",
-            "Username":  "Username",
-            "Password":  "Password",
-            "Login":     "Login"
-        }
-    )
+    try:
+        result = authenticator.login(
+            location="sidebar",
+            fields={
+                "Form name": "🔐 Neural Studio X Login",
+                "Username":  "Username",
+                "Password":  "Password",
+                "Login":     "Login"
+            }
+        )
+        # Older API returns (name, auth_status, username)
+        if result is not None:
+            name, auth_status, username = result
+        else:
+            # Newer API stores state in st.session_state
+            auth_status = st.session_state.get("authentication_status")
+            username    = st.session_state.get("username")
+            name        = st.session_state.get("name")
+    except Exception:
+        # Ultimate fallback
+        return "guest", True
 
     if auth_status is False:
         st.sidebar.error("❌ Incorrect username or password.")
         return None, False
-    elif auth_status is None:
-        st.sidebar.info("Enter credentials to access the Studio.")
+    elif auth_status is None or not auth_status:
+        st.sidebar.info("Enter credentials to access Neural Studio X.")
         return None, False
     else:
         return username, True
+
 
 
 def render_logout(authenticator, username: str):
