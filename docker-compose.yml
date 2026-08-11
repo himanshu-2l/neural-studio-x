@@ -29,26 +29,14 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # ─── Streamlit Frontend ──────────────────────────────────────
+  # ─── React Frontend ──────────────────────────────────────────
   frontend:
-    build: .
+    build: ./frontend
     container_name: nsx-frontend
-    command: >
-      python -m streamlit run app.py
-      --server.port 8501
-      --server.headless true
-      --server.address 0.0.0.0
     ports:
-      - "8501:8501"
-    volumes:
-      - ./studio_x.db:/app/studio_x.db
-      - ./model_*.pkl:/app/model_*.pkl || true
-    env_file:
-      - .env
+      - "5173:5173"
     environment:
-      - APP_ENV=production
-      - API_BASE_URL=http://api:8000   # Internal Docker network URL
-      - COOKIE_SECRET=${COOKIE_SECRET:-nsx-super-secret-key-change-in-prod}
+      - VITE_API_BASE_URL=http://localhost:8000
     depends_on:
       api:
         condition: service_healthy

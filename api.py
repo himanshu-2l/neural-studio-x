@@ -18,8 +18,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 # Internal modules
-from database import init_db, save_experiment, load_experiments, save_prediction, get_stats
-from ml_utils import build_features, get_pipeline, run_kfold, get_house_data_df, HAS_SKLEARN
+from database import init_db, save_experiment, load_experiments, save_prediction, load_predictions, get_stats
+from ml_utils import build_features, get_pipeline, run_kfold, get_house_data_df, HAS_SKLEARN, calculate_drift
 
 try:
     from dotenv import load_dotenv
@@ -146,6 +146,7 @@ class TrainResponse(BaseModel):
     cv_folds:   int
     mean_rmsle: float
     std_rmsle:  float
+    scores:     list[float]
     model_path: str
     timestamp:  str
 
@@ -271,9 +272,17 @@ def train(body: TrainRequest):
         cv_folds=body.cv_folds,
         mean_rmsle=round(mean_s, 4),
         std_rmsle=round(std_s, 4),
+        scores=[round(s, 4) for s in scores],
         model_path=model_path,
         timestamp=datetime.now().isoformat()
     )
+
+
+@app.get("/predictions", tags=["Registry"])
+def predictions():
+    """Return the latest prediction query logs."""
+    rows = load_predictions()
+    return {"count": len(rows), "predictions": rows}
 
 
 @app.get("/experiments", tags=["Registry"])
@@ -306,3 +315,30 @@ def delete_model(algo: str):
     path.unlink()
     logger.info(f"Model deleted: {path.name}")
     return {"deleted": algo}
+
+
+@app.get("/drift", tags=["Registry"])
+def drift():
+    """Calculate Kolmogorov-Smirnov drift statistics on prediction logs."""
+    preds = load_predictions()
+    pred_rows = []
+    for p in preds:
+        try:
+            feats = json.loads(p['input_features'])
+            pred_rows.append(feats)
+        except Exception:
+            pass
+
+    if len(pred_rows) < 5:
+        return {"status": "insufficient_data", "target_count": len(pred_rows), "metrics": {}}
+
+    target_df = pd.DataFrame(pred_rows)
+    ref_df = get_house_data_df()
+    metrics = calculate_drift(ref_df, target_df)
+
+    return {
+        "status": "success",
+        "target_count": len(pred_rows),
+        "metrics": metrics
+    }
+
