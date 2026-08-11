@@ -26,12 +26,12 @@ CREDENTIALS = {
         "himanshu": {
             "name":     "Himanshu",
             "email":    "himanshurathore212.2l@gmail.com",
-            "password": "$2b$12$KDRaPlE/DLbVMc.Lm8TSH.hYxkHaH8AuMKzCHgVXiRQ0kxhRfvnDe",  # neural2026
+            "password": "$2b$12$pcdu1r7C2VZcYQoVYg5d/OseTSTIfh8RSBgdaqpXw8ewcnHALSkHW",  # neural2026
         },
         "guest": {
             "name":     "Guest User",
             "email":    "guest@neuralstudiox.ai",
-            "password": "$2b$12$FiVHFJgQ0X5X.1/2L8yHYegWe5V1FNGi.xE9Iz5u4mOAqDpEhEt.S",  # guest123
+            "password": "$2b$12$lOtMfRdVI3avF5HSZL9QBuVh0cEG5O3kg8nin0BoK8CWpuY.3LwOG",  # guest123
         }
     }
 }
@@ -52,7 +52,9 @@ def build_authenticator():
         COOKIE_CONFIG["name"],
         COOKIE_CONFIG["key"],
         COOKIE_CONFIG["expiry_days"],
+        auto_hash=False
     )
+
 
 
 def render_login(authenticator) -> tuple[str | None, bool]:
@@ -94,6 +96,11 @@ def render_login(authenticator) -> tuple[str | None, bool]:
         )
         auth_status = st.session_state.get("authentication_status")
         username    = st.session_state.get("username")
+
+        # If user just successfully logged in, trigger a rerun manually
+        # to render the main app immediately (bypasses a streamlit-authenticator dict bug)
+        if auth_status is True:
+            st.rerun()
     except Exception:
         # Graceful fallback to guest if anything breaks
         return "guest", True
@@ -108,6 +115,7 @@ def render_login(authenticator) -> tuple[str | None, bool]:
         return None, False
     else:
         return username, True
+
 
 
 
