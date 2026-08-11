@@ -1,4 +1,5 @@
 import os
+import uuid
 import json
 import logging
 import numpy as np
@@ -7,6 +8,13 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+
+# Internal modules
+from database import init_db, save_experiment, load_experiments, save_prediction, load_predictions, get_stats
+from auth import build_authenticator, render_login, render_logout
+
+# Bootstrap DB on every cold start
+init_db()
 
 # Configure structured logging
 logging.basicConfig(
@@ -188,6 +196,16 @@ def run_kfold(df: pd.DataFrame, algo_name: str, n_splits: int = 5):
 # ============================================================
 # SIDEBAR
 # ============================================================
+# ─── Authentication ─────────────────────────────────────────
+_authenticator = build_authenticator()
+_username, _authenticated = render_login(_authenticator)
+
+if not _authenticated:
+    st.stop()  # Block entire app if not logged in
+
+render_logout(_authenticator, _username)
+
+# ─── Control Center ──────────────────────────────────────────
 st.sidebar.markdown("## ⚙️ Control Center")
 dataset_choice = st.sidebar.selectbox(
     "Active Dataset / Project",
@@ -220,6 +238,14 @@ st.sidebar.markdown(f"- **PyTorch**: {'🟢 Ready' if HAS_TORCH else '🟡 CPU M
 st.sidebar.markdown(f"- **Scikit-Learn**: {'🟢 Ready' if HAS_SKLEARN else '🔴 Missing'}")
 st.sidebar.markdown(f"- **SHAP Explainer**: {'🟢 Real SHAP' if HAS_SHAP else '🟡 Approximate'}")
 st.sidebar.markdown(f"- **Drawing Canvas**: {'🟢 Ready' if HAS_CANVAS else '🟡 Fallback'}")
+
+# Live DB stats in sidebar
+_db_stats = get_stats()
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📊 Session Stats")
+st.sidebar.markdown(f"- 🧪 **Experiments**: {_db_stats['total_experiments']}")
+st.sidebar.markdown(f"- 🔮 **Predictions logged**: {_db_stats['total_predictions']}")
+st.sidebar.markdown(f"- 🏆 **Best RMSLE**: {_db_stats['best_rmsle']}")
 
 
 # ============================================================
@@ -383,6 +409,16 @@ with tab_inf:
             pred_price = np.expm1(pred_log)
             err_margin = pred_price * 0.065
 
+            # ── Log prediction to SQLite ──────────────────────
+            save_prediction(
+                username=_username,
+                algorithm=inf_algo,
+                input_features={'GrLivArea': in_liv, 'OverallQual': in_qual,
+                                'TotalBsmtSF': in_bsmt, 'YearBuilt': in_year,
+                                'FullBath': in_bath},
+                predicted_price=pred_price
+            )
+
             st.markdown(
                 f'<div class="glass-card" style="text-align:center; border-color:#00f2fe; margin-top:12px;">'
                 f'<div class="card-label">Predicted Sale Price</div>'
@@ -442,19 +478,19 @@ with tab_train:
                 st.session_state['last_algo'] = train_algo
                 st.session_state['last_score'] = mean_s
 
-                # Log experiment
-                run_log = {
-                    'timestamp': datetime.now().isoformat(),
-                    'algorithm': train_algo,
-                    'cv_folds': cv_folds,
-                    'mean_rmsle': round(mean_s, 4),
-                    'std_rmsle': round(std_s, 4)
-                }
-                history = st.session_state.get('exp_history', [])
-                history.append(run_log)
-                st.session_state['exp_history'] = history
-                logger.info(f"Training complete | {run_log}")
-                st.info(f"Model saved to `{model_path}` via joblib.")
+                # ── Persist to SQLite ─────────────────────────
+                run_id = str(uuid.uuid4())[:8]
+                save_experiment(
+                    run_id=run_id,
+                    username=_username,
+                    algorithm=train_algo,
+                    cv_folds=cv_folds,
+                    mean_rmsle=mean_s,
+                    std_rmsle=std_s,
+                    hyperparams={'n_splits': cv_folds}
+                )
+                logger.info(f"Run {run_id} persisted | {train_algo} | RMSLE={mean_s:.4f}")
+                st.info(f"✅ Run `{run_id}` saved to database & model serialized to `{model_path}`.")
             else:
                 st.warning("Switch to House Prices dataset or install Scikit-Learn.")
         else:
@@ -555,17 +591,30 @@ with tab_shap:
 # TAB 8 — EXPERIMENT TRACKER
 # ─────────────────────────────────────────────────────────────
 with tab_exp:
-    st.markdown("### 📈 Experiment Tracker & Model Registry")
-    history = st.session_state.get('exp_history', [])
-    if history:
-        exp_df = pd.DataFrame(history)
-        exp_df['Champion'] = ['🏆' if i == exp_df['mean_rmsle'].idxmin() else '' for i in range(len(exp_df))]
-        st.dataframe(exp_df, use_container_width=True)
+    st.markdown("### 📈 Experiment Tracker & Model Registry (Persistent SQLite)")
 
-        fig_hist = px.line(exp_df, x='timestamp', y='mean_rmsle', color='algorithm', markers=True,
-                           template="plotly_dark", title="Experiment RMSLE History")
+    # ── Load from real database ───────────────────────────────
+    db_experiments = load_experiments()
+    if db_experiments:
+        exp_df = pd.DataFrame(db_experiments)
+        exp_df['champion'] = exp_df['is_champion'].map({1: '🏆 Champion', 0: ''})
+        display_cols = ['run_id', 'username', 'algorithm', 'cv_folds',
+                        'mean_rmsle', 'std_rmsle', 'champion', 'created_at']
+        st.dataframe(exp_df[display_cols], use_container_width=True)
+
+        fig_hist = px.bar(exp_df, x='run_id', y='mean_rmsle', color='algorithm',
+                          template="plotly_dark", title="All Experiment Runs (DB)",
+                          error_y='std_rmsle')
         fig_hist.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_hist, use_container_width=True)
+
+        # Show prediction log
+        st.markdown("#### 🔮 Prediction Log")
+        pred_history = load_predictions(username=_username)
+        if pred_history:
+            st.dataframe(pd.DataFrame(pred_history)[['algorithm','predicted_price','created_at']], use_container_width=True)
+        else:
+            st.info("No predictions logged yet. Use the **🔮 Inference Playground** tab.")
     else:
         st.info("No experiments yet. Run training in the **⚡ Real Trainer** tab to populate this registry.")
 
