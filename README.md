@@ -1,122 +1,136 @@
-# 🧠 Neural Studio X (v3.0) — Commercial-Grade AI & Data Science Web Suite
+# 🧠 Neural Studio X (v3.3) — Enterprise Data Science & ML Web Suite
 
-[![GitHub Repo](https://img.shields.io/badge/GitHub-neural--studio--x-00f2fe?logo=github)](https://github.com/himanshu-2l/neural-studio-x)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-ff4b4b?logo=streamlit)](https://streamlit.io)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c?logo=pytorch)](https://pytorch.org)
-[![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-1.3+-f7931e?logo=scikit-learn)](https://scikit-learn.org)
-[![Docker Ready](https://img.shields.io/badge/Docker-Ready-2496ed?logo=docker)](https://www.docker.com)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-neural--studio--x-00d4ff?logo=github)](https://github.com/himanshu-2l/neural-studio-x)
+[![React](https://img.shields.io/badge/React-19.0+-61dafb?logo=react)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-8.0+-646cff?logo=vite)](https://vite.dev)
+[![Tailwind CSS v4](https://img.shields.io/badge/Tailwind_CSS-v4.0-38bdf8?logo=tailwind-css)](https://tailwindcss.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi)](https://fastapi.tiangolo.com)
+[![Pytest](https://img.shields.io/badge/Pytest-9.0+-0a9edc?logo=pytest)](https://pytest.org)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ed?logo=docker)](https://www.docker.com)
+[![SQLite](https://img.shields.io/badge/SQLite-3.0+-003b57?logo=sqlite)](https://www.sqlite.org)
 
-**Neural Studio X** is an interactive, full-stack Data Science & Machine Learning Platform built with **Streamlit**, **PyTorch**, **Plotly**, **Scikit-Learn**, and **Pandas**.
-
-It provides automated 3D Exploratory Data Analysis (EDA), interactive PyTorch Neural Networks, real-time in-browser model training, AutoML algorithm tournaments, live inference playgrounds, MLflow-style experiment tracking, and 1-click Kaggle submission validation.
-
----
-
-## 🌟 Key Features & Modules
-
-```
-                    ┌──────────────────────────────────────────────┐
-                    │            NEURAL STUDIO X (v3.0)            │
-                    └──────────────────────┬───────────────────────┘
-                                           │
- ┌─────────────────┬─────────────────┬─────┴─────┬─────────────────┬─────────────────┐
- │                 │                 │           │                 │                 │
-┌▼────────┐   ┌────▼────┐       ┌────▼────┐ ┌────▼────┐       ┌────▼────┐       ┌────▼────┐
-│   EDA   │   │ CLEANER │       │ INFERENCE│ │ PyTorch │       │ AutoML  │       │ EXPERIMENT│
-│ & 3D    │   │ & IQR   │       │ PAD     │ │ CANVAS  │       │ RADAR   │       │ TRACKER │
-└─────────┘   └─────────┘       └─────────┘ └─────────┘       └─────────┘       └─────────┘
-```
-
-### 📊 1. Automated EDA & 3D Analytics Engine
-- **Universal Dataset Support**: Built-in profiler for Kaggle House Prices, Digit Recognizer, and custom uploaded CSV files.
-- **Target Distribution Normalization**: Interactive comparison of raw target distributions vs log-transformed $\log(1 + x)$ (`np.log1p`).
-- **Interactive 3D Scatter Plot**: Dynamic 3D Plotly visualizer mapping living area, basement square footage, overall quality, and target variables.
-
-### ⚙️ 2. Intelligent Feature Engineering Workshop
-- **Domain Feature Generation**: Interactive creation of combined square footage (`TotalSF`), total bathrooms (`TotalBath`), and property age (`HouseAge`).
-- **Interactive Feature Creator**: Select any two numeric columns to generate custom arithmetic interactions (`+`, `-`, `*`, `/`).
-
-### 🧹 3. Automated Data Cleaner & Outlier Sanitizer
-- **IQR Statistical Outlier Detection**: Dynamic threshold slider to inspect and flag statistical anomalies outside calculated bounds.
-- **Live Outlier Clipping**: 1-click button to sanitize extreme values in numeric features.
-- **Before vs After Distribution Boxplots**: Interactive Plotly boxplot comparison showing distribution normalization.
-
-### 🔮 4. Live Model Inference Playground ("Predictor Pad")
-- **Real-Time Input Controls**: Adjust sliders for Living Area, Quality, Basement SF, Year Built, and Bathroom count.
-- **Dynamic Price Prediction**: Generates real-time model predictions with confidence ranges (e.g., `$214,500 ± $12,500`).
-- **Feature Contribution Waterfall**: Visual breakdown showing estimated price impact per feature.
-
-### 🎨 5. PyTorch Vision Lab 2.0 (Interactive Canvas & Softmax Inspector)
-- **HTML5 Mouse Drawing Canvas**: Draw any handwritten digit (0–9) directly in your browser with your mouse.
-- **Softmax Prediction Confidence Visualizer**: Live probability distribution bar charts across digit classes (0–9).
-
-### ⚡ 6. Live In-Browser Model Trainer & Cross-Validation
-- **K-Fold CV Execution**: Run K-Fold Cross-Validation live in your browser and track fold-by-fold validation RMSLE/Accuracy scores.
-
-### 🏆 7. AutoML Algorithm Tournament & Radar Profiler
-- **Multi-Algorithm Tournament**: Compare **Gradient Boosting**, **Random Forest**, **ExtraTrees**, **PyTorch CNN**, and **Ridge Regression**.
-- **Multi-Metric Polar Radar Chart**: Plotly Radar chart comparing models across Accuracy, Training Speed, Scalability, Explainability, and Robustness.
-
-### 🛡️ 8. SHAP Model Explainability & Feature Impact
-- **White-Box Transparency**: Global SHAP feature importance rankings demonstrating positive and negative impacts on predictions.
-
-### 📈 9. Experiment Tracking & Model Registry (MLflow-Style)
-- **Model Run History**: Logs historical runs, architectures, hyperparameter configurations, and tags the **"🏆 CHAMPION MODEL"**.
-
-### 🚀 10. Kaggle Submission Generator & REST API Export
-- **Compliance Engine**: Enforces exact row count compliance (`1459` test rows for House Prices, `1000` for Digit Recognizer).
-- **FastAPI Code Generator**: Auto-generates production backend code to serve trained models via REST API endpoints.
+**Neural Studio X** is an enterprise-grade, de-coupled Machine Learning Operations (MLOps) dashboard and prediction suite. Powered by a headless **FastAPI** model engine and a responsive **React + Vite + Tailwind CSS v4** single-page application, it provides data scientists with high-performance interactive analysis, training, and real-time validation.
 
 ---
 
-## 📁 Repository Structure
+## 🏗️ Architecture Blueprint
 
 ```
-neural-studio-x/
-├── app.py              # Main Multi-Module Streamlit Application Suite
-├── requirements.txt    # Application Dependencies
-├── Dockerfile          # Production Containerization Config
-├── README.md           # Project Documentation & Architecture Guide
-└── .gitignore          # Git Ignore Rules
+ ┌─────────────────────────────────────────────────────────┐
+ │               React + Vite Frontend (Port 5173)         │
+ │          App.jsx, Components (Dashboard, Charts)        │
+ └────────────────────────────┬────────────────────────────┘
+                              │ Axios REST API Queries
+                              ▼
+ ┌─────────────────────────────────────────────────────────┐
+ │               FastAPI ML Backend (Port 8000)            │
+ │       api.py ─── ml_utils.py ─── database.py (SQLite)   │
+ └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🚀 Local Setup & Installation
+## 🌟 Why Neural Studio X is Unique & Useful
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/himanshu-2l/neural-studio-x.git
-   cd neural-studio-x
-   ```
+Most ML UI dashboards are built using Streamlit, which has significant limitations—specifically, it re-runs the entire python script on every UI slider adjustment, leading to sluggish renders and slow page responsiveness.
 
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Launch the application**:
-   ```bash
-   streamlit run app.py
-   ```
-   Open `http://localhost:8501` in your browser!
+**Neural Studio X** solves this by establishing a production-grade, headless architecture:
+- **Asynchronous Separation of Concerns:** React handles client-side rendering with lightning speed, while FastAPI handles pure model compute on separate threads.
+- **Statistical Drift Detection:** Automatically runs a two-sample **Kolmogorov-Smirnov (KS) test** comparing logged production inputs against baseline training distributions to catch model drift instantly.
+- **Persistent MLOps Auditing:** Stores every experiment configuration, K-Fold cross-validation metric, and prediction log in a persistent **SQLite** database.
+- **Pure decoupled ML pipelines:** `ml_utils.py` contains zero framework dependencies, allowing unit and regression test suites to execute inside pure python in seconds.
 
 ---
 
-## 🐳 Docker Deployment
+## 📸 Interface Preview
 
-Run Neural Studio X in a containerized environment:
+![Dashboard Analytics](screenshots/media__1785847676161.png)
+*Figure 1: High-fidelity training logs and performance graphs mapped via Apache ECharts.*
 
+![AutoML Radar Profiling](screenshots/media__1784981064407.png)
+*Figure 2: Multi-model capability benchmarks plotted on dynamic radar coordinates.*
+
+---
+
+## 🌟 Core Modules
+
+### 📊 1. Data Explorer
+- **Interactive EDA:** Auto-profiles records, quantifies numeric columns, and identifies missing data metrics.
+- **Seeded Datasets:** Built-in generators for Kaggle House Prices regression, Digit Recognizers, and custom CSV uploads.
+- **Distribution Analysis:** Toggle normalizations or view target variable distributions.
+- **Multi-Dimensional Scatterplots:** Map features to X, Y, Size, and Color configurations to visually evaluate cluster boundaries.
+
+### ⚡ 2. Model Trainer & CV Monitor
+- **Real-Time K-Fold Execution:** Configure fold splits (3-10) and models (Gradient Boosting, Random Forest, Ridge Regression) to execute actual cross-validation runs.
+- **Performance Histograms:** Render validation scores fold-by-fold as they complete.
+
+### 🔮 3. Inference Lab ("Predictor Pad")
+- Adjust sliders (living area, quality, year built) to evaluate real-time price predictions.
+- Outputs 95% confidence intervals and feature contribution charts.
+
+### 🛡️ 4. Data Quality & Drift Monitor
+- Runs Kolmogorov-Smirnov statistical tests to detect feature distribution drift.
+- Graphs probability density shifts comparing reference baseline distributions against production queries.
+
+---
+
+## 🚀 Getting Started
+
+### 📦 Prerequisites
+- Python 3.11+
+- Node.js 20+
+
+### 1. Run via Docker Compose (Recommended)
+Launch the complete stack (FastAPI backend and React frontend) with a single command:
 ```bash
-# Build Docker image
-docker build -t neural-studio-x .
-
-# Run container
-docker run -p 8501:8501 neural-studio-x
+docker compose up --build
 ```
+- **React Frontend:** `http://localhost:5173`
+- **FastAPI Backend Swagger docs:** `http://localhost:8000/docs`
+
+### 2. Manual Local Development Setup
+
+#### Start FastAPI Backend:
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Start Uvicorn server
+python -m uvicorn api:app --host 0.0.0.0 --port 8000 --log-level info
+```
+
+#### Start React Frontend:
+```bash
+cd frontend
+
+# Install package dependencies
+npm install
+
+# Start Vite dev server
+npm run dev
+```
+
+---
+
+## 🧪 Running Unit & Integration Tests
+
+Ensure code integrity before contributing by running Pytest:
+```bash
+python -m pytest tests/ -v
+```
+
+---
+
+## 🤝 Contributing
+
+Neural Studio X is open-source and welcomes contributions! To contribute:
+1. **Fork** the repository on GitHub.
+2. **Create a Branch** (`git checkout -b feature/amazing-feature`).
+3. **Write Tests** for new helper classes or endpoints.
+4. **Commit & Push** your changes (`git commit -m 'Add amazing feature'`).
+5. **Open a Pull Request** for review.
 
 ---
 
 ## 👤 Author & Maintainer
-
-Developed & maintained by **Himanshu** ([@himanshu-2l](https://github.com/himanshu-2l)).
+Maintained with ⚡ by **Himanshu** ([@himanshu-2l](https://github.com/himanshu-2l)). Feel free to reach out for questions or collaborations!
