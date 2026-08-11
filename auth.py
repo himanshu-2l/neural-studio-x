@@ -58,42 +58,57 @@ def build_authenticator():
 def render_login(authenticator) -> tuple[str | None, bool]:
     """
     Render login widget. Returns (username, is_authenticated).
-    Handles both old (tuple) and new (session_state) streamlit-authenticator APIs.
-    Falls back gracefully if not installed.
+    Handles new streamlit-authenticator API and adds a Quick Demo Login button.
     """
     if not HAS_AUTH or authenticator is None:
         return "guest", True
 
+    # Check if already authenticated in session state
+    auth_status = st.session_state.get("authentication_status")
+    username    = st.session_state.get("username")
+
+    if auth_status is True and username:
+        return username, True
+
+    # Render a Quick Demo Login button
+    st.sidebar.markdown("### ⚡ Quick Access")
+    if st.sidebar.button("🔑 Direct Demo Login (guest)", use_container_width=True):
+        st.session_state["authentication_status"] = True
+        st.session_state["username"] = "guest"
+        st.session_state["name"] = "Guest User"
+        st.rerun()
+
+    st.sidebar.markdown("<div class='nsx-divider'></div>", unsafe_allow_html=True)
+
     try:
-        result = authenticator.login(
+        # For newer streamlit-authenticator versions, rendering location='sidebar' returns None
+        # and sets st.session_state['authentication_status'], st.session_state['username']
+        authenticator.login(
             location="sidebar",
             fields={
-                "Form name": "🔐 Neural Studio X Login",
+                "Form name": "🔐 Login to Studio X",
                 "Username":  "Username",
                 "Password":  "Password",
                 "Login":     "Login"
             }
         )
-        # Older API returns (name, auth_status, username)
-        if result is not None:
-            name, auth_status, username = result
-        else:
-            # Newer API stores state in st.session_state
-            auth_status = st.session_state.get("authentication_status")
-            username    = st.session_state.get("username")
-            name        = st.session_state.get("name")
+        auth_status = st.session_state.get("authentication_status")
+        username    = st.session_state.get("username")
     except Exception:
-        # Ultimate fallback
+        # Graceful fallback to guest if anything breaks
         return "guest", True
 
     if auth_status is False:
-        st.sidebar.error("❌ Incorrect username or password.")
+        st.sidebar.error("❌ Incorrect credentials.")
+        st.sidebar.caption("Demo credentials:\n- User: `guest` | Pass: `guest123`\n- User: `himanshu` | Pass: `neural2026`")
         return None, False
-    elif auth_status is None or not auth_status:
-        st.sidebar.info("Enter credentials to access Neural Studio X.")
+    elif auth_status is None:
+        st.sidebar.info("Please login or use Direct Demo Login.")
+        st.sidebar.caption("Demo credentials:\n- User: `guest` | Pass: `guest123`")
         return None, False
     else:
         return username, True
+
 
 
 
