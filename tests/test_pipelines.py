@@ -1,10 +1,9 @@
 import pytest
 import numpy as np
 import pandas as pd
-import sys, os
 
-# Make sure app module can be imported for utility functions
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Import from ml_utils — pure ML module, no Streamlit dependency
+from ml_utils import build_features, get_pipeline, run_kfold
 
 
 def get_sample_house_df(n=100):
@@ -17,32 +16,28 @@ def get_sample_house_df(n=100):
         'FullBath':    np.random.randint(1, 3, size=n),
         'HalfBath':    np.random.randint(0, 2, size=n),
         'Neighborhood':np.random.choice(['A','B','C'], size=n),
-        'SalePrice':   np.random.normal(180000, 30000, size=n)
+        'SalePrice':   np.abs(np.random.normal(180000, 30000, size=n)) + 10000
     })
 
 
 class TestBuildFeatures:
     def test_total_sf_created(self):
-        from app import build_features
-        df   = get_sample_house_df()
-        out  = build_features(df)
+        df  = get_sample_house_df()
+        out = build_features(df)
         assert 'TotalSF' in out.columns
 
     def test_total_bath_created(self):
-        from app import build_features
         df  = get_sample_house_df()
         out = build_features(df)
         assert 'TotalBath' in out.columns
 
     def test_house_age_created(self):
-        from app import build_features
         df  = get_sample_house_df()
         out = build_features(df)
         assert 'HouseAge' in out.columns
         assert (out['HouseAge'] >= 0).all(), "HouseAge should not be negative"
 
     def test_total_sf_values(self):
-        from app import build_features
         df  = get_sample_house_df()
         out = build_features(df)
         expected = df['TotalBsmtSF'] + df['GrLivArea']
@@ -52,23 +47,19 @@ class TestBuildFeatures:
 
 class TestGetPipeline:
     def test_gradient_boosting_pipeline(self):
-        from app import get_pipeline
         pipe = get_pipeline("GradientBoostingRegressor")
         assert pipe is not None
         assert 'model' in pipe.named_steps
 
     def test_random_forest_pipeline(self):
-        from app import get_pipeline
         pipe = get_pipeline("RandomForestRegressor")
         assert pipe is not None
 
     def test_ridge_pipeline(self):
-        from app import get_pipeline
         pipe = get_pipeline("Ridge")
         assert pipe is not None
 
     def test_pipeline_fit_predict(self):
-        from app import get_pipeline, build_features
         df    = get_sample_house_df(50)
         fe_df = build_features(df)
         cols  = [c for c in fe_df.select_dtypes(include=[np.number]).columns if c != 'SalePrice']
@@ -83,19 +74,16 @@ class TestGetPipeline:
 
 class TestKFold:
     def test_kfold_returns_correct_fold_count(self):
-        from app import run_kfold
-        df     = get_sample_house_df(100)
+        df = get_sample_house_df(100)
         scores, model, feats = run_kfold(df, "Ridge", n_splits=3)
         assert len(scores) == 3
 
     def test_kfold_scores_are_positive(self):
-        from app import run_kfold
-        df     = get_sample_house_df(100)
+        df = get_sample_house_df(100)
         scores, _, _ = run_kfold(df, "Ridge", n_splits=3)
         assert all(s >= 0 for s in scores)
 
     def test_kfold_returns_trained_model(self):
-        from app import run_kfold
         df = get_sample_house_df(100)
         _, model, _ = run_kfold(df, "Ridge", n_splits=3)
         assert model is not None
