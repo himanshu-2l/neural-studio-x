@@ -119,3 +119,36 @@ class TestModels:
         body = r.json()
         assert "models" in body
         assert isinstance(body["models"], list)
+
+    def test_download_ridge_model(self):
+        # First train Ridge model to guarantee it exists on disk
+        client.post("/train",
+            json={"algorithm": "Ridge", "cv_folds": 3, "username": "test"},
+            headers=HEADERS
+        )
+        r = client.get("/models/Ridge/download")
+        assert r.status_code == 200
+        assert r.headers["content-type"] == "application/octet-stream"
+
+    def test_promote_experiment(self):
+        # Train a model to create a run_id
+        tr = client.post("/train",
+            json={"algorithm": "Ridge", "cv_folds": 3, "username": "test"},
+            headers=HEADERS
+        ).json()
+        run_id = tr["run_id"]
+        # Promote the run_id
+        r = client.post(f"/experiments/{run_id}/promote", headers=HEADERS)
+        assert r.status_code == 200
+        assert r.json()["status"] == "success"
+
+        # Verify prediction using "Production" hotswaps to the Ridge model
+        pr = client.post("/predict",
+            json={"GrLivArea": 1850, "OverallQual": 7, "TotalBsmtSF": 1050,
+                  "YearBuilt": 2005, "FullBath": 2, "HalfBath": 1,
+                  "algorithm": "Production", "username": "test"},
+            headers=HEADERS
+        )
+        assert pr.status_code == 200
+        assert pr.json()["predicted_price"] > 50000
+

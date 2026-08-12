@@ -207,6 +207,7 @@ export default function InferenceLab({ username }) {
                 onChange={(e) => setAlgo(e.target.value)}
                 className="w-full bg-[#09090b] border border-zinc-800 rounded-lg p-3 text-sm text-zinc-300 focus:outline-none"
               >
+                <option value="Production">🚀 Active Production Model</option>
                 <option value="GradientBoostingRegressor">Gradient Boosting Regressor</option>
                 <option value="RandomForestRegressor">Random Forest Regressor</option>
                 <option value="Ridge">Ridge Regression</option>

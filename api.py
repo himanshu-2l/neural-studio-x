@@ -14,11 +14,12 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends, Header, status
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 # Internal modules
-from database import init_db, save_experiment, load_experiments, save_prediction, load_predictions, get_stats
+from database import init_db, save_experiment, load_experiments, save_prediction, load_predictions, get_stats, promote_experiment, get_production_algorithm
 from ml_utils import build_features, get_pipeline, run_kfold, get_house_data_df, HAS_SKLEARN, calculate_drift
 
 try:
@@ -79,6 +80,8 @@ MODEL_DIR = Path(__file__).parent
 
 
 def load_model(algo: str):
+    if algo.lower() == "production":
+        algo = get_production_algorithm()
     path = MODEL_DIR / f"model_{algo.lower()}.pkl"
     if not path.exists():
         raise HTTPException(
@@ -111,7 +114,7 @@ class HouseFeatures(BaseModel):
     @field_validator('algorithm')
     @classmethod
     def algo_must_be_valid(cls, v):
-        valid = {"GradientBoostingRegressor", "RandomForestRegressor", "Ridge"}
+        valid = {"GradientBoostingRegressor", "RandomForestRegressor", "Ridge", "Production"}
         if v not in valid:
             raise ValueError(f"algorithm must be one of {valid}")
         return v
@@ -341,4 +344,26 @@ def drift():
         "target_count": len(pred_rows),
         "metrics": metrics
     }
+
+
+@app.get("/models/{algo}/download", tags=["Registry"])
+def download_model(algo: str):
+    """Download a serialized model .pkl file from disk."""
+    path = MODEL_DIR / f"model_{algo.lower()}.pkl"
+    if not path.exists():
+        raise HTTPException(404, f"Model '{algo}' file not found on disk.")
+    return FileResponse(
+        path=path,
+        filename=f"model_{algo.lower()}.pkl",
+        media_type="application/octet-stream"
+    )
+
+
+@app.post("/experiments/{run_id}/promote", tags=["Registry"],
+          dependencies=[Depends(verify_api_key)])
+def promote(run_id: str):
+    """Promote an experiment run to active production champion."""
+    promote_experiment(run_id)
+    return {"status": "success", "promoted": run_id}
+
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import apiClient from '../apiClient';
-import { History, TrendingDown, Trash2, ShieldAlert } from 'lucide-react';
+import { History, TrendingDown, ShieldAlert, Rocket, Download } from 'lucide-react';
 
 export default function Experiments() {
   const [experiments, setExperiments] = useState([]);
@@ -13,7 +13,6 @@ export default function Experiments() {
     setError('');
     try {
       const response = await apiClient.get('/experiments');
-      // Format response
       const exps = response.data.experiments || [];
       // Sort by created_at descending
       exps.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -22,6 +21,15 @@ export default function Experiments() {
       setError('Failed to load experiments registry from SQLite.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePromote = async (runId) => {
+    try {
+      await apiClient.post(`/experiments/${runId}/promote`);
+      fetchExperiments();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to promote model to production.');
     }
   };
 
@@ -41,7 +49,6 @@ export default function Experiments() {
 
   const trendOption = useMemo(() => {
     if (experiments.length === 0) return null;
-    // Sort chronological for line plotting
     const chronological = [...experiments].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     
     return {
@@ -117,24 +124,61 @@ export default function Experiments() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-zinc-800 text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">
-                    <th className="py-2.5 px-2">🏆</th>
+                  <tr className="border-b border-zinc-800 text-[10px] text-zinc-500 uppercase tracking-wider font-semibold font-sans">
+                    <th className="py-2.5 px-2">Deployment Tag</th>
                     <th className="py-2.5 px-2">Run ID</th>
-                    <th className="py-2.5 px-2">User</th>
                     <th className="py-2.5 px-2">Algorithm</th>
                     <th className="py-2.5 px-2 font-mono">Folds</th>
                     <th className="py-2.5 px-2 text-right">RMSLE</th>
+                    <th className="py-2.5 px-2 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {experiments.map((row) => (
                     <tr key={row.run_id} className="border-b border-zinc-800/40 text-xs text-zinc-300">
-                      <td className="py-3 px-2">{row.is_champion ? '🏆' : ''}</td>
+                      <td className="py-3 px-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          {row.is_champion === 1 && (
+                            <span className="bg-yellow-950/30 border border-yellow-800/40 text-yellow-400 text-[10px] px-1.5 py-0.5 rounded font-bold">
+                              🏆 CHAMPION
+                            </span>
+                          )}
+                          {row.is_production === 1 && (
+                            <span className="bg-emerald-950/30 border border-emerald-800/40 text-emerald-400 text-[10px] px-1.5 py-0.5 rounded font-bold">
+                              🚀 PRODUCTION
+                            </span>
+                          )}
+                          {row.is_champion === 0 && row.is_production === 0 && (
+                            <span className="text-zinc-600 text-[10px]">Registry</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-3 px-2 font-mono text-zinc-500">{row.run_id}</td>
-                      <td className="py-3 px-2 text-zinc-400">{row.username}</td>
                       <td className="py-3 px-2 font-semibold">{row.algorithm.replace('Regressor', '')}</td>
                       <td className="py-3 px-2 font-mono">{row.cv_folds}</td>
                       <td className="py-3 px-2 text-right text-emerald-400 font-mono font-bold">{row.mean_rmsle.toFixed(4)}</td>
+                      <td className="py-3 px-2 text-right">
+                        <div className="flex justify-end gap-2">
+                          {row.is_production === 0 && (
+                            <button
+                              onClick={() => handlePromote(row.run_id)}
+                              title="Promote to Production"
+                              className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <Rocket className="w-3 h-3" />
+                              Promote
+                            </button>
+                          )}
+                          <a
+                            href={`http://localhost:8000/models/${row.algorithm}/download`}
+                            title="Download PKL File"
+                            className="bg-zinc-800/80 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-colors"
+                          >
+                            <Download className="w-3 h-3" />
+                            Download
+                          </a>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

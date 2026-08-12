@@ -52,9 +52,16 @@ def init_db():
         )
     """)
 
+    # Alter experiments table to add is_production if not exists
+    try:
+        cur.execute("ALTER TABLE experiments ADD COLUMN is_production INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+
     conn.commit()
     conn.close()
     logger.info(f"Database initialised at {DB_PATH}")
+
 
 
 def save_experiment(run_id: str, username: str, algorithm: str,
@@ -134,3 +141,29 @@ def get_stats() -> dict:
         'total_predictions': total_pred,
         'best_rmsle': round(best_rmsle, 4)
     }
+
+
+def promote_experiment(run_id: str) -> None:
+    """Set is_production = 1 for the given run_id, and 0 for all others."""
+    conn = get_connection()
+    cur  = conn.cursor()
+    # Reset all
+    cur.execute("UPDATE experiments SET is_production = 0")
+    # Set run_id to production
+    cur.execute("UPDATE experiments SET is_production = 1 WHERE run_id = ?", (run_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_production_algorithm() -> str:
+    """Return the algorithm name for the active production model run, defaulting to GradientBoostingRegressor if none."""
+    conn = get_connection()
+    cur  = conn.cursor()
+    cur.execute("SELECT algorithm FROM experiments WHERE is_production = 1 LIMIT 1")
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        return row['algorithm']
+    return "GradientBoostingRegressor"
+
+
