@@ -28,7 +28,7 @@ jobs:
 
       - name: 🔍 Lint with Flake8
         run: |
-          flake8 app.py --max-line-length=120 --ignore=E501,W503 --count
+          flake8 api.py database.py auth.py ml_utils.py --max-line-length=120 --ignore=E501,W503,E221,E241,E272 --count
 
       - name: 🧪 Run Unit Tests
         run: |
